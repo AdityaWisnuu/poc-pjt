@@ -17,16 +17,28 @@ class _Stage {
   final String detail;
 }
 
-const _stages = [
-  _Stage(['CREATED', 'SELLING_USDC'], 'Menjual USDC', 'USDC ke rupiah'),
-  _Stage(['BUYING_IDRX'], 'Membeli IDRX', 'Rupiah ke stablecoin rupiah'),
-  _Stage(['SENDING_IDRX'], 'Mengirim IDRX', 'Ke akun settlement'),
-  _Stage(
+List<_Stage> _stagesFor(String asset) => [
+  if (asset == 'IDRX')
+    const _Stage(
+      ['CREATED', 'SENDING_IDRX'],
+      'Mengirim IDRX',
+      'Tanpa konversi, langsung ke akun settlement',
+    )
+  else ...[
+    _Stage(['CREATED', 'SELLING_ASSET'], 'Menjual $asset', '$asset ke rupiah'),
+    const _Stage(
+      ['BUYING_IDRX'],
+      'Membeli IDRX',
+      'Rupiah ke stablecoin rupiah',
+    ),
+    const _Stage(['SENDING_IDRX'], 'Mengirim IDRX', 'Ke akun settlement'),
+  ],
+  const _Stage(
     ['AWAITING_RECEIPT'],
     'Memastikan dana masuk',
     'Verifikasi penerimaan',
   ),
-  _Stage(['PAYING_MERCHANT'], 'Membayar merchant', 'Rupiah lewat QRIS'),
+  const _Stage(['PAYING_MERCHANT'], 'Membayar merchant', 'Rupiah lewat QRIS'),
 ];
 
 class ProcessingScreen extends StatefulWidget {
@@ -41,6 +53,7 @@ class ProcessingScreen extends StatefulWidget {
 class _ProcessingScreenState extends State<ProcessingScreen>
     with SingleTickerProviderStateMixin {
   late Order _order = widget.order;
+  late final List<_Stage> _stages = _stagesFor(widget.order.asset);
   late final AnimationController _spin = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 950),

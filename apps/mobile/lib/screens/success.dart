@@ -115,7 +115,10 @@ class _SuccessScreenState extends State<SuccessScreen>
     child: Column(
       children: [
         _line('Merchant', order.merchantName),
-        _line('Dibayar', '${usdc(order.usdcAmount)} USDC'),
+        _line(
+          'Dibayar',
+          '${tokenAmount(order.asset, order.assetAmount)} ${order.asset}',
+        ),
         _line('Waktu', wibTime(order.completedAt ?? order.createdAt)),
         _line('ID', order.id.substring(order.id.length - 12).toUpperCase()),
       ],

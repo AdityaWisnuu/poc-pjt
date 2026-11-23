@@ -7,7 +7,9 @@ import {
   ParseUUIDPipe,
   Post,
 } from '@nestjs/common';
+import type { PayAsset } from '@prisma/client';
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -30,6 +32,10 @@ class CreateQuoteDto {
   @Min(1)
   @Max(1_000_000_000)
   amountIdr?: number;
+
+  @IsOptional()
+  @IsIn(['USDC', 'USDT', 'IDRX'])
+  asset?: PayAsset;
 }
 
 class CreateOrderDto {
@@ -59,7 +65,7 @@ export class OrdersController {
 
   @Post('quotes')
   quote(@Body() body: CreateQuoteDto) {
-    return this.orders.createQuote(body.qr, body.amountIdr);
+    return this.orders.createQuote(body.qr, body.amountIdr, body.asset);
   }
 
   @Post('orders')

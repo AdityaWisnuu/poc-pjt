@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api.dart';
 import '../theme.dart';
@@ -26,6 +27,8 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
   Timer? _timer;
   double _remaining = _ttl;
   bool _refreshing = false;
+  String? _pendingAsset;
+  int _requestId = 0;
   String? _error;
 
   @override
@@ -54,24 +57,41 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
     if (left <= 0) _timer?.cancel();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh([String? asset]) async {
+    final target = asset ?? _quote.asset!;
+    final request = ++_requestId;
     setState(() {
       _refreshing = true;
+      _pendingAsset = target;
       _error = null;
     });
     try {
       final quote = await Api.instance.quote(
         _quote.qr,
         amountIdr: _quote.amountIdr,
+        asset: target,
       );
-      if (!mounted) return;
+      if (!mounted || request != _requestId) return;
       setState(() => _quote = quote);
       _startTimer();
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted && request == _requestId) {
+        setState(() => _error = error.message);
+      }
     } finally {
-      if (mounted) setState(() => _refreshing = false);
+      if (mounted && request == _requestId) {
+        setState(() {
+          _refreshing = false;
+          _pendingAsset = null;
+        });
+      }
     }
+  }
+
+  void _select(PaymentOption option) {
+    if (option.asset == (_pendingAsset ?? _quote.asset)) return;
+    HapticFeedback.selectionClick();
+    _refresh(option.asset);
   }
 
   Future<void> _pay() async {
@@ -91,6 +111,11 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
   Widget build(BuildContext context) {
     final height = MediaQuery.sizeOf(context).height;
     final expired = _remaining <= 0;
+    final message =
+        _error ??
+        (!_refreshing && !_quote.sufficient
+            ? 'Saldo ${_quote.asset} tidak cukup'
+            : null);
 
     return Scaffold(
       body: Stack(
@@ -117,27 +142,27 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
                       _Countdown(remaining: _remaining, total: _ttl),
                     ],
                   ),
-                  const Spacer(flex: 2),
+                  const Spacer(),
                   Reveal(child: _merchant()),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 12),
                   Reveal(
                     delay: 70,
                     child: FittedBox(
                       child: Text(
                         rupiah(_quote.amountIdr!),
-                        style: type(56, weight: 700, tabular: true),
+                        style: type(52, weight: 700, tabular: true),
                       ),
                     ),
                   ),
-                  const Spacer(flex: 3),
-                  Reveal(delay: 140, child: _details()),
-                  const SizedBox(height: 14),
+                  const Spacer(),
+                  Reveal(delay: 140, child: _assetPicker()),
+                  const SizedBox(height: 8),
                   SizedBox(
                     height: 22,
-                    child: _error == null
+                    child: message == null
                         ? null
                         : Text(
-                            _error!,
+                            message,
                             style: type(
                               13.5,
                               weight: 600,
@@ -145,7 +170,7 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
                             ),
                           ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Reveal(
                     delay: 210,
                     child: expired
@@ -153,10 +178,11 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
                             label: _refreshing
                                 ? 'Memperbarui…'
                                 : 'Perbarui kurs',
-                            onTap: _refreshing ? null : _refresh,
+                            onTap: _refreshing ? null : () => _refresh(),
                           )
                         : SlideToPay(
                             label: 'Geser untuk bayar',
+                            enabled: _quote.sufficient && !_refreshing,
                             onComplete: _pay,
                           ),
                   ),
@@ -172,8 +198,8 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
   Widget _merchant() => Column(
     children: [
       Container(
-        width: 66,
-        height: 66,
+        width: 56,
+        height: 56,
         alignment: Alignment.center,
         decoration: const BoxDecoration(
           color: Palette.text,
@@ -181,10 +207,10 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
         ),
         child: Text(
           _quote.merchantName.characters.first.toUpperCase(),
-          style: type(27, weight: 800, color: Palette.ink),
+          style: type(23, weight: 800, color: Palette.ink),
         ),
       ),
-      const SizedBox(height: 13),
+      const SizedBox(height: 10),
       Text(
         _quote.merchantName,
         textAlign: TextAlign.center,
@@ -200,56 +226,133 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
     ],
   );
 
-  Widget _details() => Container(
-    padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-    decoration: BoxDecoration(
-      color: Palette.surface,
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: Palette.line),
-    ),
-    child: Column(
-      children: [
-        Row(
+  Widget _assetPicker() {
+    final selected = _pendingAsset ?? _quote.asset;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(7, 12, 7, 7),
+      decoration: BoxDecoration(
+        color: Palette.surface,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: Palette.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(11, 0, 11, 7),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Bayar dengan',
+                  style: type(13, weight: 650, color: Palette.muted),
+                ),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Text(
+                    _quote.asset == 'IDRX'
+                        ? 'Tanpa konversi'
+                        : '1 ${_quote.asset} = ${rupiah(_quote.rate!)}',
+                    key: ValueKey('${_quote.asset}${_quote.rate}'),
+                    style: type(12.5, weight: 650, tabular: true),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (final option in _quote.options)
+            _AssetOption(
+              option: option,
+              selected: option.asset == selected,
+              onTap: () => _select(option),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AssetOption extends StatelessWidget {
+  const _AssetOption({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final PaymentOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      height: 58,
+      padding: const EdgeInsets.symmetric(horizontal: 11),
+      decoration: BoxDecoration(
+        color: selected ? Palette.surfaceHigh : Colors.transparent,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(
+          color: selected
+              ? Palette.mint.withValues(alpha: 0.72)
+              : Colors.transparent,
+          width: 1.4,
+        ),
+      ),
+      child: AnimatedOpacity(
+        opacity: option.sufficient ? 1 : 0.46,
+        duration: const Duration(milliseconds: 200),
+        child: Row(
           children: [
-            const TokenIcon('USDC', size: 40),
-            const SizedBox(width: 12),
+            TokenIcon(option.asset, size: 36),
+            const SizedBox(width: 11),
             Expanded(
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(option.asset, style: type(15, weight: 700)),
+                  const SizedBox(height: 1),
                   Text(
-                    'Dibayar dengan',
-                    style: type(12.5, color: Palette.muted),
+                    option.sufficient ? option.name : 'Saldo kurang',
+                    style: type(
+                      12,
+                      color: option.sufficient ? Palette.muted : Palette.coral,
+                    ),
                   ),
-                  const SizedBox(height: 2),
-                  Text('USDC', style: type(15.5, weight: 700)),
                 ],
               ),
             ),
             Text(
-              usdc(_quote.usdcAmount!),
-              style: type(19, weight: 700, tabular: true),
+              tokenAmount(option.asset, option.amount),
+              style: type(17, weight: 700, tabular: true),
+            ),
+            const SizedBox(width: 11),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected ? Palette.mint : Colors.transparent,
+                border: Border.all(
+                  color: selected ? Palette.mint : Palette.faint,
+                  width: 2,
+                ),
+              ),
+              child: selected
+                  ? const Icon(
+                      Icons.check_rounded,
+                      size: 15,
+                      color: Palette.ink,
+                    )
+                  : null,
             ),
           ],
         ),
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 13),
-          child: Divider(height: 1, color: Palette.line),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Kurs termasuk biaya',
-              style: type(13.5, color: Palette.muted),
-            ),
-            Text(
-              '1 USDC = ${rupiah(_quote.rate!)}',
-              style: type(13.5, weight: 650, tabular: true),
-            ),
-          ],
-        ),
-      ],
+      ),
     ),
   );
 }

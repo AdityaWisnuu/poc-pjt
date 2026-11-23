@@ -42,3 +42,6 @@ apps/mobile/android/app/build/
 .idea/
 .vscode/
 *.log
+
+# Local browser verification
+.playwright-mcp/

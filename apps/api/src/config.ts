@@ -25,6 +25,10 @@ export class AppConfig {
     return this.env.get<string>('SIM_USDC_BALANCE') ?? '16.0002';
   }
 
+  get simUsdtBalance(): string {
+    return this.env.get<string>('SIM_USDT_BALANCE') ?? '20';
+  }
+
   get simIdrxBalance(): string {
     return this.env.get<string>('SIM_IDRX_BALANCE') ?? '73102';
   }

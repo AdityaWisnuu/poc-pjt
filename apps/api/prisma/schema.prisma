@@ -9,7 +9,7 @@ datasource db {
 
 enum TransactionStatus {
   CREATED
-  SELLING_USDC
+  SELLING_ASSET
   BUYING_IDRX
   SENDING_IDRX
   AWAITING_RECEIPT
@@ -17,6 +17,12 @@ enum TransactionStatus {
   SUCCESS
   FAILED
   NEEDS_REVIEW
+}
+
+enum PayAsset {
+  USDC
+  USDT
+  IDRX
 }
 
 enum SettlementMode {
@@ -31,8 +37,9 @@ model Quote {
   merchantCity String       @map("merchant_city")
   amountIdr    Int          @map("amount_idr")
   buyIdr       Int          @map("buy_idr")
-  usdcAmount   Decimal      @map("usdc_amount") @db.Decimal(20, 8)
-  usdcIdrBid   Decimal      @map("usdc_idr_bid") @db.Decimal(20, 4)
+  asset        PayAsset     @default(USDC)
+  assetAmount  Decimal      @map("asset_amount") @db.Decimal(20, 8)
+  assetIdrBid  Decimal      @map("asset_idr_bid") @db.Decimal(20, 4)
   idrxIdrAsk   Decimal      @map("idrx_idr_ask") @db.Decimal(20, 6)
   expiresAt    DateTime     @map("expires_at")
   usedAt       DateTime?    @map("used_at")
@@ -50,8 +57,9 @@ model Transaction {
   merchantName      String            @map("merchant_name")
   merchantCity      String            @map("merchant_city")
   amountIdr         Int               @map("amount_idr")
-  usdcPlanned       Decimal           @map("usdc_planned") @db.Decimal(20, 8)
-  usdcSold          Decimal?          @map("usdc_sold") @db.Decimal(20, 8)
+  asset             PayAsset          @default(USDC)
+  assetPlanned      Decimal           @map("asset_planned") @db.Decimal(20, 8)
+  assetSold         Decimal?          @map("asset_sold") @db.Decimal(20, 8)
   idrProceeds       Int?              @map("idr_proceeds")
   idrxBought        Decimal?          @map("idrx_bought") @db.Decimal(20, 2)
   idrxSent          Decimal?          @map("idrx_sent") @db.Decimal(20, 2)
@@ -60,8 +68,9 @@ model Transaction {
   buyClientOrderId  String            @unique @map("buy_client_order_id")
   withdrawRequestId String            @unique @map("withdraw_request_id")
   failureReason     String?           @map("failure_reason")
+  evidence          Json              @default("{}")
   createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
   completedAt       DateTime?         @map("completed_at")
 
   quote     Quote                @relation(fields: [quoteId], references: [id])

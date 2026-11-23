@@ -4,7 +4,7 @@ import {
   InsufficientLiquidityError,
   Level,
   SELL_FEE,
-  usdcToSellForIdr,
+  assetToSellForIdr,
 } from './quote-math';
 
 describe('quote math', () => {
@@ -23,7 +23,7 @@ describe('quote math', () => {
 
   it('sells enough USDC to net the target after fee and buffer', () => {
     const bids: Level[] = [['18000', '100']];
-    const usdc = usdcToSellForIdr(bids, 36000);
+    const usdc = assetToSellForIdr(bids, 36000);
     const net = usdc.times(18000).times(new Decimal(1).minus(SELL_FEE));
     expect(net.gte(36000)).toBe(true);
     expect(net.lt(36400)).toBe(true);
@@ -34,15 +34,15 @@ describe('quote math', () => {
       ['18000', '1'],
       ['17900', '100'],
     ];
-    const flat = usdcToSellForIdr([['18000', '100']], 36000);
-    expect(usdcToSellForIdr(bids, 36000).gt(flat)).toBe(true);
+    const flat = assetToSellForIdr([['18000', '100']], 36000);
+    expect(assetToSellForIdr(bids, 36000).gt(flat)).toBe(true);
   });
 
   it('throws when the book cannot fill', () => {
     expect(() => idrToBuyIdrx([['1', '10']], 1000)).toThrow(
       InsufficientLiquidityError,
     );
-    expect(() => usdcToSellForIdr([['18000', '0.001']], 1000)).toThrow(
+    expect(() => assetToSellForIdr([['18000', '0.001']], 1000)).toThrow(
       InsufficientLiquidityError,
     );
   });

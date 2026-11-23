@@ -25,8 +25,8 @@ export function idrToBuyIdrx(asks: Level[], targetIdrx: number): number {
   throw new InsufficientLiquidityError('Likuiditas IDRX tidak cukup');
 }
 
-/** USDC to market-sell so net proceeds cover `idr`, walking the bids. */
-export function usdcToSellForIdr(bids: Level[], idr: number): Decimal {
+/** Stablecoin to market-sell so net proceeds cover `idr`, walking the bids. */
+export function assetToSellForIdr(bids: Level[], idr: number): Decimal {
   let remaining = new Decimal(idr).div(new Decimal(1).minus(SELL_FEE));
   let quantity = new Decimal(0);
   for (const [price, size] of bids) {
@@ -40,5 +40,5 @@ export function usdcToSellForIdr(bids: Level[], idr: number): Decimal {
     quantity = quantity.plus(size);
     remaining = remaining.minus(levelValue);
   }
-  throw new InsufficientLiquidityError('Likuiditas USDC tidak cukup');
+  throw new InsufficientLiquidityError('Likuiditas aset tidak cukup');
 }

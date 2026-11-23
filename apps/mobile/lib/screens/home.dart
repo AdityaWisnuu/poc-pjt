@@ -249,7 +249,7 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${asset.symbol == 'USDC' ? usdc(asset.amount) : plainNumber(num.parse(asset.amount))} ${asset.symbol}',
+                      '${tokenAmount(asset.symbol, asset.amount)} ${asset.symbol}',
                       style: type(12.5, color: Palette.muted, tabular: true),
                     ),
                   ],
@@ -333,7 +333,7 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${usdc(order.usdcAmount)} USDC',
+                        '${tokenAmount(order.asset, order.assetAmount)} ${order.asset}',
                         style: type(12.5, color: Palette.muted, tabular: true),
                       ),
                     ],

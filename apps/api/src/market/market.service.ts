@@ -12,7 +12,7 @@ const CACHE_MS = 2000;
 export class MarketService {
   private readonly cache = new Map<string, { at: number; depth: Depth }>();
 
-  async depth(pair: 'usdcidr' | 'idxidr'): Promise<Depth> {
+  async depth(pair: 'usdcidr' | 'usdtidr' | 'idxidr'): Promise<Depth> {
     const hit = this.cache.get(pair);
     if (hit && Date.now() - hit.at < CACHE_MS) return hit.depth;
 

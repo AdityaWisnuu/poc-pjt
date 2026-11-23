@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07080c">
+<title>Kasir Merchant</title>
+<link rel="icon" href="data:,">
+<style>
+@font-face { font-family: "Jakarta"; src: url("/console/assets/font.ttf") format("truetype"); font-weight: 200 800; }
+:root { --ink: #07080c; --surface: #12141a; --surface-2: #1c1f27; --line: rgba(255,255,255,.08); --text: #f6f7f9; --muted: #9398a6; --mint: #22edb3; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; background: var(--ink); color: var(--text); font-family: "Jakarta", system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow: hidden; }
+.layout { height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 16px; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+.stage { position: relative; overflow: hidden; border-radius: 34px; background: var(--surface); display: flex; flex-direction: column; padding: 32px; }
+.top { position: relative; z-index: 3; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; transition: color .35s; }
+.shop { font-size: 21px; font-weight: 750; letter-spacing: -.02em; }
+.city { margin-top: 2px; font-size: 13.5px; font-weight: 600; color: var(--muted); transition: color .35s; }
+.sound { flex: none; height: 42px; padding: 0 17px; border: 0; border-radius: 21px; background: var(--text); color: var(--ink); font: 700 13.5px "Jakarta", sans-serif; cursor: pointer; transition: transform .14s; }
+.sound:active { transform: scale(.95); }
+.sound.on { background: var(--surface-2); color: var(--muted); }
+
+.idle { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; transition: opacity .3s, transform .4s; }
+.waiting { position: relative; width: 190px; height: 190px; display: grid; place-items: center; margin: 0 auto 26px; }
+.waiting i { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.42); animation: wave 3s cubic-bezier(.2,.6,.35,1) infinite; }
+.waiting i:nth-child(2) { animation-delay: 1s; }
+.waiting i:nth-child(3) { animation-delay: 2s; }
+.core { width: 82px; height: 82px; border-radius: 50%; background: var(--text); color: var(--ink); display: grid; place-items: center; font-size: 26px; font-weight: 800; letter-spacing: -.04em; animation: breathe 3s ease-in-out infinite; }
+.idle h1 { font-size: clamp(26px, 3.2vw, 40px); font-weight: 750; letter-spacing: -.035em; }
+.idle p { margin-top: 7px; color: var(--muted); font-size: 15.5px; font-weight: 550; }
+
+.received { position: absolute; inset: 0; z-index: 2; background: var(--mint); color: var(--ink); display: grid; place-items: center; text-align: center; padding: 96px 24px 40px; clip-path: circle(0 at 50% 52%); transition: clip-path .62s cubic-bezier(.2,.8,.2,1); }
+.stage.paid .received { clip-path: circle(150% at 50% 52%); }
+.stage.paid .idle { opacity: 0; transform: scale(.92); }
+.stage.paid .top, .stage.paid .city { color: var(--ink); }
+.stage.paid .sound.on { background: rgba(7,8,12,.12); color: var(--ink); }
+.check { width: 112px; height: 112px; margin: 0 auto 20px; display: block; }
+.check circle { fill: var(--ink); transform-origin: center; transform: scale(0); }
+.check path { fill: none; stroke: var(--mint); stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 90; stroke-dashoffset: 90; }
+.stage.paid .check circle { animation: pop .62s .12s cubic-bezier(.2,1.6,.4,1) forwards; }
+.stage.paid .check path { animation: draw .42s .44s ease-in-out forwards; }
+.label { font-size: clamp(19px, 2.2vw, 28px); font-weight: 750; letter-spacing: -.02em; }
+.big { margin-top: 6px; font-size: clamp(58px, 9vw, 132px); line-height: 1.02; font-weight: 800; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+.when { margin-top: 12px; font-size: 16px; font-weight: 650; opacity: .72; font-variant-numeric: tabular-nums; }
+.stage.paid .label, .stage.paid .big, .stage.paid .when { animation: rise .5s .26s cubic-bezier(.2,.8,.2,1) both; }
+.stage.paid .big { animation-delay: .33s; }
+.stage.paid .when { animation-delay: .42s; }
+
+.side { min-height: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 34px; padding: 24px 12px 12px; display: flex; flex-direction: column; }
+.side h2 { padding: 0 12px 10px; font-size: 15px; font-weight: 700; color: var(--muted); }
+.list { min-height: 0; overflow: auto; }
+.row { display: flex; justify-content: space-between; gap: 14px; align-items: center; padding: 13px 12px; border-radius: 18px; }
+.row.new { animation: flash 2.6s ease-out; }
+.row b { display: block; font-size: 16.5px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.row small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 550; color: var(--muted); }
+.row .tick { flex: none; width: 30px; height: 30px; border-radius: 50%; background: rgba(34,237,179,.14); color: var(--mint); display: grid; place-items: center; }
+.row svg { width: 15px; height: 15px; }
+.empty { padding: 8px 12px; color: var(--muted); font-size: 14px; }
+.foot { margin-top: auto; padding: 12px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+@keyframes wave { from { transform: scale(.43); opacity: .9; } to { transform: scale(1); opacity: 0; } }
+@keyframes breathe { 50% { transform: scale(1.05); } }
+@keyframes pop { to { transform: scale(1); } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes flash { 0%, 35% { background: rgba(34,237,179,.18); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; } }
+@media (max-width: 820px) {
+  .layout { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 210px; gap: 12px; padding-left: 12px; padding-right: 12px; }
+  .stage { padding: 22px; border-radius: 28px; }
+  .side { border-radius: 28px; padding-top: 16px; }
+  .waiting { width: 150px; height: 150px; }
+  .foot { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <section class="stage" id="stage">
+    <div class="top">
+      <div><div class="shop" id="shop">Kasir</div><div class="city" id="city"></div></div>
+      <button class="sound" id="sound" type="button">Aktifkan suara</button>
+    </div>
+    <div class="idle">
+      <div>
+        <div class="waiting"><i></i><i></i><i></i><div class="core">Rp</div></div>
+        <h1>Siap menerima pembayaran</h1>
+        <p>Pembayaran QRIS akan muncul di sini</p>
+      </div>
+    </div>
+    <div class="received" aria-live="assertive">
+      <div>
+        <svg class="check" viewBox="0 0 112 112"><circle cx="56" cy="56" r="56"/><path d="M33 58 49 74 80 40"/></svg>
+        <div class="label">Pembayaran diterima</div>
+        <div class="big" id="big">Rp0</div>
+        <div class="when" id="when"></div>
+      </div>
+    </div>
+  </section>
+  <aside class="side">
+    <h2>Pembayaran terakhir</h2>
+    <div class="list" id="list"></div>
+    <div class="foot" id="mode"></div>
+  </aside>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const idr = (n) => 'Rp' + Number(n).toLocaleString('id-ID');
+const time = (iso) => new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(iso)).replaceAll(':', '.') + ' WIB';
+
+let seen = null, queue = [], showing = false, audio = null, freshId = null;
+
+$('sound').onclick = () => {
+  audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+  audio.resume();
+  $('sound').textContent = 'Suara aktif';
+  $('sound').classList.add('on');
+  chime();
+};
+
+function chime() {
+  if (!audio) return;
+  const now = audio.currentTime;
+  [[880, 0], [1174.66, .13], [1567.98, .26]].forEach(([freq, at]) => {
+    const osc = audio.createOscillator(), gain = audio.createGain();
+    osc.type = 'sine'; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, now + at);
+    gain.gain.linearRampToValueAtTime(.2, now + at + .018);
+    gain.gain.exponentialRampToValueAtTime(.0001, now + at + .62);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(now + at); osc.stop(now + at + .65);
+  });
+}
+
+function speak(amount) {
+  if (!audio || !('speechSynthesis' in window)) return;
+  const say = new SpeechSynthesisUtterance(`Pembayaran diterima, ${amount} rupiah`);
+  say.lang = 'id-ID'; say.rate = .98;
+  const voice = speechSynthesis.getVoices().find((v) => v.lang.toLowerCase().startsWith('id'));
+  if (voice) say.voice = voice;
+  setTimeout(() => speechSynthesis.speak(say), 720);
+}
+
+function renderList(payments) {
+  const list = $('list');
+  if (!payments.length) {
+    const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = 'Belum ada pembayaran';
+    list.replaceChildren(empty); return;
+  }
+  list.replaceChildren(...payments.map((p) => {
+    const row = document.createElement('div'); row.className = 'row' + (p.id === freshId ? ' new' : '');
+    const left = document.createElement('div');
+    const amount = document.createElement('b'); amount.textContent = idr(p.amountIdr);
+    const meta = document.createElement('small'); meta.textContent = (p.completedAt ? time(p.completedAt) : '') + ' · QRIS';
+    left.append(amount, meta);
+    const tick = document.createElement('div'); tick.className = 'tick';
+    tick.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 6.5 12 13 4.5"/></svg>';
+    row.append(left, tick);
+    return row;
+  }));
+}
+
+function nextPayment() {
+  if (showing || !queue.length) return;
+  showing = true;
+  const p = queue.shift();
+  freshId = p.id;
+  $('shop').textContent = p.merchantName;
+  $('city').textContent = p.merchantCity || '';
+  $('big').textContent = idr(p.amountIdr);
+  $('when').textContent = p.completedAt ? time(p.completedAt) : '';
+  $('stage').classList.remove('paid');
+  void $('stage').offsetWidth;
+  $('stage').classList.add('paid');
+  chime(); speak(p.amountIdr);
+  setTimeout(() => { $('stage').classList.remove('paid'); showing = false; setTimeout(nextPayment, 420); }, 7000);
+}
+
+async function refresh() {
+  try {
+    const state = await (await fetch('/merchant/state', { cache: 'no-store' })).json();
+    $('mode').textContent = state.mode === 'live' ? '' : 'Mode simulasi';
+    if (seen === null) {
+      seen = new Set(state.payments.map((p) => p.id));
+      if (state.payments[0]) { $('shop').textContent = state.payments[0].merchantName; $('city').textContent = state.payments[0].merchantCity || ''; }
+    } else {
+      const fresh = state.payments.filter((p) => !seen.has(p.id)).reverse();
+      fresh.forEach((p) => { seen.add(p.id); queue.push(p); });
+    }
+    renderList(state.payments);
+    nextPayment();
+  } catch {}
+}
+
+const events = new EventSource('/merchant/events');
+events.addEventListener('change', refresh);
+events.onopen = refresh;
+setInterval(refresh, 4000);
+refresh();
+</script>
+</body>
+</html>

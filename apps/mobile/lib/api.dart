@@ -40,6 +40,21 @@ class Wallet {
   bool get isSimulation => mode != 'live';
 }
 
+class PaymentOption {
+  PaymentOption.fromJson(Map<String, dynamic> json)
+    : asset = json['asset'] as String,
+      name = json['name'] as String,
+      amount = json['amount'] as String,
+      rate = json['rate'] as int,
+      sufficient = json['sufficient'] as bool;
+
+  final String asset;
+  final String name;
+  final String amount;
+  final int rate;
+  final bool sufficient;
+}
+
 class Quote {
   Quote.fromJson(Map<String, dynamic> json, this.qr)
     : needsAmount = json['needsAmount'] as bool,
@@ -47,8 +62,13 @@ class Quote {
       merchantName = json['merchantName'] as String,
       merchantCity = json['merchantCity'] as String,
       amountIdr = json['amountIdr'] as int?,
-      usdcAmount = json['usdcAmount'] as String?,
+      asset = json['asset'] as String?,
+      assetAmount = json['assetAmount'] as String?,
       rate = json['rate'] as int?,
+      sufficient = json['sufficient'] as bool? ?? false,
+      options = ((json['options'] as List?) ?? const [])
+          .map((item) => PaymentOption.fromJson(item as Map<String, dynamic>))
+          .toList(),
       expiresAt = json['expiresAt'] == null
           ? null
           : DateTime.parse(json['expiresAt'] as String),
@@ -61,8 +81,11 @@ class Quote {
   final String merchantName;
   final String merchantCity;
   final int? amountIdr;
-  final String? usdcAmount;
+  final String? asset;
+  final String? assetAmount;
   final int? rate;
+  final bool sufficient;
+  final List<PaymentOption> options;
   final DateTime? expiresAt;
   final int? minIdr;
   final int? maxIdr;
@@ -75,7 +98,8 @@ class Order {
       merchantName = json['merchantName'] as String,
       merchantCity = json['merchantCity'] as String,
       amountIdr = json['amountIdr'] as int,
-      usdcAmount = json['usdcAmount'] as String,
+      asset = json['asset'] as String,
+      assetAmount = json['assetAmount'] as String,
       feeIdr = json['feeIdr'] as int,
       failureReason = json['failureReason'] as String?,
       createdAt = DateTime.parse(json['createdAt'] as String),
@@ -88,7 +112,8 @@ class Order {
   final String merchantName;
   final String merchantCity;
   final int amountIdr;
-  final String usdcAmount;
+  final String asset;
+  final String assetAmount;
   final int feeIdr;
   final String? failureReason;
   final DateTime createdAt;
@@ -151,8 +176,12 @@ class Api {
   Future<Order> order(String id) async =>
       Order.fromJson(await _get('/orders/$id') as Map<String, dynamic>);
 
-  Future<Quote> quote(String qr, {int? amountIdr}) async {
-    final json = await _post('/quotes', {'qr': qr, 'amountIdr': ?amountIdr});
+  Future<Quote> quote(String qr, {int? amountIdr, String? asset}) async {
+    final json = await _post('/quotes', {
+      'qr': qr,
+      'amountIdr': ?amountIdr,
+      'asset': ?asset,
+    });
     return Quote.fromJson(json as Map<String, dynamic>, qr);
   }
 

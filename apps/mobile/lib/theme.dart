@@ -55,6 +55,8 @@ final _usdc = NumberFormat('#,##0.0000', 'id');
 String rupiah(num value) => 'Rp${_rupiah.format(value)}';
 String plainNumber(num value) => _rupiah.format(value);
 String usdc(String value) => _usdc.format(double.parse(value));
+String tokenAmount(String asset, String value) =>
+    asset == 'IDRX' ? plainNumber(num.parse(value)) : usdc(value);
 
 String wibTime(DateTime value) {
   final wib = value.toUtc().add(const Duration(hours: 7));
