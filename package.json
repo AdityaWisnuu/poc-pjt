@@ -1,0 +1,12 @@
+{
+  "name": "poc-pjt",
+  "private": true,
+  "packageManager": "pnpm@12.14.0",
+  "scripts": {
+    "db:up": "docker compose up -d --wait postgres",
+    "db:migrate": "pnpm --filter api exec prisma migrate deploy",
+    "api:dev": "pnpm --filter api start:dev",
+    "api:test": "pnpm --filter api test",
+    "tunnel": "ssh -N -L 127.0.0.1:8443:api.indodax.com:443 -i ~/.ssh/pjt_tunnel -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes wisnu-tunnel@146.190.95.201"
+  }
+}

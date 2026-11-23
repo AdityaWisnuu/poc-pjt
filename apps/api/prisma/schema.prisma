@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TransactionStatus {
+  CREATED
+  SELLING_USDC
+  BUYING_IDRX
+  SENDING_IDRX
+  AWAITING_RECEIPT
+  PAYING_MERCHANT
+  SUCCESS
+  FAILED
+  NEEDS_REVIEW
+}
+
+enum SettlementMode {
+  SIMULATE
+  LIVE
+}
+
+model Quote {
+  id           String       @id @db.Uuid
+  qrPayload    String       @map("qr_payload")
+  merchantName String       @map("merchant_name")
+  merchantCity String       @map("merchant_city")
+  amountIdr    Int          @map("amount_idr")
+  buyIdr       Int          @map("buy_idr")
+  usdcAmount   Decimal      @map("usdc_amount") @db.Decimal(20, 8)
+  usdcIdrBid   Decimal      @map("usdc_idr_bid") @db.Decimal(20, 4)
+  idrxIdrAsk   Decimal      @map("idrx_idr_ask") @db.Decimal(20, 6)
+  expiresAt    DateTime     @map("expires_at")
+  usedAt       DateTime?    @map("used_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  transaction  Transaction?
+
+  @@map("quotes")
+}
+
+model Transaction {
+  id                String            @id @db.Uuid
+  quoteId           String            @unique @map("quote_id") @db.Uuid
+  mode              SettlementMode
+  status            TransactionStatus @default(CREATED)
+  merchantName      String            @map("merchant_name")
+  merchantCity      String            @map("merchant_city")
+  amountIdr         Int               @map("amount_idr")
+  usdcPlanned       Decimal           @map("usdc_planned") @db.Decimal(20, 8)
+  usdcSold          Decimal?          @map("usdc_sold") @db.Decimal(20, 8)
+  idrProceeds       Int?              @map("idr_proceeds")
+  idrxBought        Decimal?          @map("idrx_bought") @db.Decimal(20, 2)
+  idrxSent          Decimal?          @map("idrx_sent") @db.Decimal(20, 2)
+  feeIdr            Int               @default(0) @map("fee_idr")
+  sellClientOrderId String            @unique @map("sell_client_order_id")
+  buyClientOrderId  String            @unique @map("buy_client_order_id")
+  withdrawRequestId String            @unique @map("withdraw_request_id")
+  failureReason     String?           @map("failure_reason")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  completedAt       DateTime?         @map("completed_at")
+
+  quote     Quote                @relation(fields: [quoteId], references: [id])
+  histories TransactionHistory[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+model TransactionHistory {
+  id            String             @id @db.Uuid
+  transactionId String             @map("transaction_id") @db.Uuid
+  fromStatus    TransactionStatus? @map("from_status")
+  toStatus      TransactionStatus  @map("to_status")
+  actor         String
+  note          String?
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+
+  @@index([transactionId, createdAt])
+  @@map("transaction_histories")
+}
