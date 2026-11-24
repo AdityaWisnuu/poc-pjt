@@ -27,9 +27,13 @@ export interface BuyResult {
   feeIdr: number;
 }
 
+/** A transfer the exchange's own withdrawal history reports as completed. */
 export interface TransferResult {
-  reference: string;
-  feeIdrx: string;
+  withdrawId: string;
+  txId: string;
+  fee: string;
+  appliedAt: string | null;
+  completedAt: string | null;
 }
 
 export interface SettlementGateway {
@@ -40,5 +44,10 @@ export interface SettlementGateway {
     clientOrderId: string,
   ): Promise<SellResult>;
   buyIdrx(idr: number, clientOrderId: string): Promise<BuyResult>;
-  sendIdrx(amount: Decimal, requestId: string): Promise<TransferResult>;
+  /** Sends `amount` of `asset` to the Settlement Account and waits for completion. */
+  sendAsset(
+    asset: PayAsset,
+    amount: Decimal,
+    requestId: string,
+  ): Promise<TransferResult>;
 }

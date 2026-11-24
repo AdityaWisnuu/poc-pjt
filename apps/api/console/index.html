@@ -36,19 +36,16 @@ main { min-height: 0; display: grid; grid-template-columns: minmax(420px, 5fr) m
 #flow { position: absolute; left: 12.5%; right: 12.5%; top: 0; height: 46px; width: 75%; }
 .node { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 0; opacity: .38; transition: opacity .45s; }
 .node.on { opacity: 1; }
-.node.skip { display: none; }
 .coin { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); font-size: 16px; font-weight: 800; transition: transform .5s cubic-bezier(.2,1.5,.4,1), box-shadow .5s; }
 .coin img { width: 46px; height: 46px; display: block; }
 .node.now .coin { transform: scale(1.14); box-shadow: 0 0 0 5px rgba(34,237,179,.18); }
 .node .sym { font-size: 13px; font-weight: 750; }
 .node .val { font-family: var(--mono); font-size: 11.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.rail { background: var(--surface); border: 1px solid var(--line); border-radius: 30px; padding: 12px 22px; min-height: 0; overflow: auto; display: flex; flex-direction: column; justify-content: space-between; }
+.rail { background: var(--surface); border: 1px solid var(--line); border-radius: 30px; padding: 12px 22px; min-height: 0; overflow: auto; display: flex; flex-direction: column; justify-content: center; gap: 10px; }
 .leg { font-size: 11.5px; font-weight: 750; letter-spacing: .09em; color: var(--faint); padding: 8px 0 2px 46px; }
 .step { position: relative; display: grid; grid-template-columns: 46px minmax(150px, 215px) minmax(0, 1fr) 64px; align-items: center; min-height: 54px; opacity: .36; transition: opacity .4s; }
 .step.done, .step.active, .step.failed { opacity: 1; }
-.step.skip { opacity: .52; }
-.step.skip .dot::after { content: ""; width: 11px; height: 2.5px; border-radius: 2px; background: var(--muted); }
 .step::before { content: ""; position: absolute; left: 13px; top: 39px; height: calc(100% - 25px); width: 2px; border-radius: 2px; background: var(--surface-2); }
 .step.last::before { display: none; }
 .step.done::before { background: linear-gradient(var(--mint), rgba(34,237,179,.3)); }
@@ -109,8 +106,8 @@ main { min-height: 0; display: grid; grid-template-columns: minmax(420px, 5fr) m
         <div class="nodes" id="nodes">
           <canvas id="flow"></canvas>
           <div class="node" data-node="0"><div class="coin"><img id="sourceLogo" src="/console/assets/usdc.svg" alt=""></div><div class="sym" id="sourceSym">USDC</div><div class="val" id="v0">—</div></div>
-          <div class="node" data-node="1"><div class="coin">Rp</div><div class="sym">IDR</div><div class="val" id="v1">—</div></div>
-          <div class="node" data-node="2"><div class="coin"><img src="/console/assets/idrx.svg" alt=""></div><div class="sym">IDRX</div><div class="val" id="v2">—</div></div>
+          <div class="node" data-node="1"><div class="coin">SA</div><div class="sym">Settlement</div><div class="val" id="v1">—</div></div>
+          <div class="node" data-node="2"><div class="coin">Rp</div><div class="sym">IDR</div><div class="val" id="v2">—</div></div>
           <div class="node" data-node="3"><div class="coin" style="background:var(--text);color:var(--ink)">M</div><div class="sym">Merchant</div><div class="val" id="v3">—</div></div>
         </div>
       </div>
@@ -119,7 +116,7 @@ main { min-height: 0; display: grid; grid-template-columns: minmax(420px, 5fr) m
   </main>
   <section class="metrics">
     <div class="metric"><small>Waktu end-to-end</small><strong id="mTime">—</strong></div>
-    <div class="metric"><small>Biaya konversi</small><strong id="mCost">—</strong></div>
+    <div class="metric"><small>Biaya transfer</small><strong id="mCost">—</strong></div>
     <div class="metric"><small id="balanceLabel">Saldo payer</small><strong id="mBalance">—</strong></div>
     <div class="metric"><small>Merchant menerima</small><strong id="mMerchant">—</strong></div>
     <div class="metric history" id="history"></div>
@@ -129,18 +126,18 @@ main { min-height: 0; display: grid; grid-template-columns: minmax(420px, 5fr) m
 <script>
 const STEPS = [
   { id: 'request', leg: null, name: 'Payment Request', sub: 'QRIS terbaca, kurs dikunci', at: ['CREATED'] },
-  { id: 'sell', leg: 'FUNDING LEG', name: 'Conversion', sub: 'Stablecoin ke IDR di PAKD', at: ['SELLING_ASSET'] },
-  { id: 'buy', leg: null, name: 'Conversion', sub: 'IDR ke IDRX di PAKD', at: ['BUYING_IDRX'] },
-  { id: 'transfer', leg: null, name: 'Value Transfer', sub: 'IDRX ke Settlement Account', at: ['SENDING_IDRX'] },
-  { id: 'funding', leg: null, name: 'Funding Confirmed', sub: 'Dana terverifikasi masuk', at: ['AWAITING_RECEIPT'] },
-  { id: 'payment', leg: 'PAYMENT LEG', name: 'Payment Execution', sub: 'Prefunded float via QRIS', at: ['PAYING_MERCHANT'] },
+  { id: 'transfer', leg: 'FUNDING LEG', name: 'Value Transfer', sub: 'Aset ke Settlement Account', at: ['SENDING_ASSET'] },
+  { id: 'funding', leg: null, name: 'Funding Confirmed', sub: 'Riwayat WD PAKD: success', at: ['AWAITING_RECEIPT'] },
+  { id: 'payment', leg: 'PAYMENT LEG', name: 'Payment Execution', sub: 'Konversi ke IDR, bayar QRIS · Simulasi', at: ['PAYING_MERCHANT'] },
   { id: 'done', leg: null, name: 'Payment Confirmed', sub: 'Merchant menerima rupiah', at: ['SUCCESS'] },
 ];
-const ORDER = ['CREATED','SELLING_ASSET','BUYING_IDRX','SENDING_IDRX','AWAITING_RECEIPT','PAYING_MERCHANT','SUCCESS'];
-const PHASE = { CREATED:'Payment Request', SELLING_ASSET:'Funding Leg', BUYING_IDRX:'Funding Leg', SENDING_IDRX:'Funding Leg', AWAITING_RECEIPT:'Funding Leg', PAYING_MERCHANT:'Payment Leg', SUCCESS:'Settlement selesai', FAILED:'Settlement gagal', NEEDS_REVIEW:'Perlu ditinjau' };
+const ORDER = ['CREATED','SENDING_ASSET','AWAITING_RECEIPT','PAYING_MERCHANT','SUCCESS'];
+const PHASE = { CREATED:'Payment Request', SENDING_ASSET:'Funding Leg', AWAITING_RECEIPT:'Funding Leg', PAYING_MERCHANT:'Payment Leg', SUCCESS:'Settlement selesai', FAILED:'Settlement gagal', NEEDS_REVIEW:'Perlu ditinjau' };
 const $ = (id) => document.getElementById(id);
 const idr = (n) => 'Rp' + Number(n).toLocaleString('id-ID');
 const num = (n, d = 0) => Number(n).toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
+const amt = (asset, n) => asset === 'IDRX' ? num(n) : num(n, 6);
+const wib = (iso) => new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(iso)).replaceAll(':', '.');
 const secs = (ms) => (ms / 1000).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'd';
 
 let state = null, selected = null, follow = true, energy = 0, targetEnergy = 0, success = 0, targetSuccess = 0, activeNode = -1;
@@ -162,13 +159,10 @@ function buildRail() {
 function proofs(o, id) {
   const e = o.evidence || {};
   if (id === 'request') return o.asset === 'IDRX'
-    ? [['Aset', 'IDRX'], ['Alokasi', num(o.quote.assetPlanned) + ' IDRX']]
-    : [[o.asset + '/IDR', num(o.quote.assetIdrBid)], ['IDRX/IDR', o.quote.idrxIdrAsk.replace('.', ',')], ['Alokasi', num(o.quote.assetPlanned, 4) + ' ' + o.asset]];
-  if ((id === 'sell' || id === 'buy') && o.asset === 'IDRX') return [['', 'Tidak perlu konversi']];
-  if (id === 'sell' && e.sell) return [['#', e.sell.reference], ['Harga', num(e.sell.avgPrice)], ['Hasil', idr(e.sell.netIdr)], ['Fee', idr(e.sell.feeIdr)]];
-  if (id === 'buy' && e.buy) return [['#', e.buy.reference], ['Dapat', num(e.buy.idrx) + ' IDRX'], ['Fee', idr(e.buy.feeIdr)]];
-  if (id === 'transfer' && e.transfer) return [['#', e.transfer.reference], ['Kirim', num(e.transfer.idrx) + ' IDRX'], ['Otorisasi', e.transfer.authorization === 'approved' ? 'Disetujui' : '—']];
-  if (id === 'funding' && e.funding) return [['Oleh', e.funding.confirmedBy]];
+    ? [['Aset', 'IDRX'], ['Alokasi', amt('IDRX', o.quote.assetPlanned) + ' IDRX']]
+    : [[o.asset + '/IDR', num(o.quote.assetIdrBid)], ['Alokasi', amt(o.asset, o.quote.assetPlanned) + ' ' + o.asset]];
+  if (id === 'transfer' && e.transfer) return [['WD', e.transfer.withdrawId], ['TxID', e.transfer.txId], ['Kirim', amt(o.asset, e.transfer.amount) + ' ' + o.asset], ['Callback', e.transfer.authorization === 'approved' ? 'Disetujui' : '—']];
+  if (id === 'funding' && e.funding) return [['Oleh', e.funding.confirmedBy], ...(e.transfer?.completedAt ? [['Selesai', wib(e.transfer.completedAt) + ' WIB']] : [])];
   if (id === 'payment' && e.payment) return [['Oleh', e.payment.executedBy], ['Kanal', e.payment.channel]];
   if (id === 'done' && e.payment) return [['Diterima', idr(e.payment.amountIdr)]];
   return [];
@@ -201,9 +195,8 @@ function render() {
     const done = o.status === 'SUCCESS' ? true : si < idx || (s.id === 'request' && idx > 0);
     const active = !failed && o.status !== 'SUCCESS' && si === idx && s.id !== 'request';
     const broken = failed && si === idx;
-    const skipped = o.asset === 'IDRX' && (s.id === 'sell' || s.id === 'buy');
-    const cls = 'step' + (i === STEPS.length - 1 ? ' last' : '') + (skipped ? ' skip' : done ? ' done' : active || (s.id === 'request' && idx === 0 && running) ? ' active' : broken ? ' failed' : '');
-    if (s.id === 'sell') row.querySelector('.step-sub').textContent = (o.asset === 'IDRX' ? 'Stablecoin' : o.asset) + ' ke IDR di PAKD';
+    if (s.id === 'transfer') row.querySelector('.step-sub').textContent = o.asset + ' ke Settlement Account';
+    const cls = 'step' + (i === STEPS.length - 1 ? ' last' : '') + (done ? ' done' : active || (s.id === 'request' && idx === 0 && running) ? ' active' : broken ? ' failed' : '');
     if (row.className !== cls) row.className = cls;
 
     const p = proofs(o, s.id);
@@ -226,23 +219,16 @@ function render() {
   });
 
   const e = o.evidence || {};
-  const direct = o.asset === 'IDRX';
   $('sourceLogo').src = '/console/assets/' + o.asset.toLowerCase() + '.svg';
   $('sourceSym').textContent = o.asset;
   $('balanceLabel').textContent = 'Saldo ' + o.asset + ' payer';
-  document.querySelectorAll('[data-node="1"],[data-node="2"]').forEach((n) => n.classList.toggle('skip', direct));
-  const visibleNodes = direct ? 2 : 4;
-  $('nodes').style.gridTemplateColumns = `repeat(${visibleNodes}, 1fr)`;
-  $('flow').style.left = 50 / visibleNodes + '%';
-  $('flow').style.right = 'auto';
-  $('flow').style.width = 100 - 100 / visibleNodes + '%';
-  const soldAmount = e.sell?.amount ?? e.sell?.usdc;
-  $('v0').textContent = direct ? num(o.assetAmount) : num(soldAmount ?? o.quote.assetPlanned, 4);
-  $('v1').textContent = e.sell ? num(e.sell.netIdr) : '—';
-  $('v2').textContent = e.buy ? num(e.buy.idrx) : '—';
+  $('v0').textContent = amt(o.asset, o.quote.assetPlanned);
+  $('v1').textContent = e.transfer ? amt(o.asset, e.transfer.amount) : '—';
+  const converting = o.status === 'PAYING_MERCHANT' || o.status === 'SUCCESS';
+  $('v2').textContent = converting ? num(o.amountIdr) : '—';
   $('v3').textContent = e.payment ? num(e.payment.amountIdr) : '—';
-  const nodeLevel = o.status === 'SUCCESS' ? 3 : e.payment ? 3 : e.buy ? 2 : e.sell ? 1 : 0;
-  activeNode = running ? (direct ? 0 : nodeLevel) : -1;
+  const nodeLevel = o.status === 'SUCCESS' || e.payment ? 3 : converting ? 2 : e.transfer ? 1 : 0;
+  activeNode = running ? nodeLevel : -1;
   document.querySelectorAll('.node').forEach((n, i) => {
     n.classList.toggle('on', i <= nodeLevel);
     n.classList.toggle('now', running && i === nodeLevel);
@@ -250,13 +236,13 @@ function render() {
 
   $('mTime').textContent = o.totalMs != null ? secs(o.totalMs) : running ? 'Berjalan' : '—';
   $('mCost').replaceChildren();
-  if (o.costBps != null) {
-    $('mCost').append(num(o.costBps));
-    const u = document.createElement('em'); u.textContent = 'bps · ' + idr(o.costIdr); $('mCost').append(u);
+  if (e.transfer) {
+    $('mCost').append(Number(e.transfer.fee) === 0 ? '0' : amt(o.asset, e.transfer.fee));
+    const u = document.createElement('em'); u.textContent = o.asset; $('mCost').append(u);
   } else $('mCost').textContent = '—';
   $('mBalance').replaceChildren();
   if (e.balances) {
-    const places = direct ? 0 : 2;
+    const places = o.asset === 'IDRX' ? 0 : 4;
     $('mBalance').append(num(e.balances.after ?? e.balances.usdcAfter, places));
     const u = document.createElement('em'); u.textContent = 'dari ' + num(e.balances.before ?? e.balances.usdcBefore, places); $('mBalance').append(u);
   } else $('mBalance').textContent = '—';
@@ -339,7 +325,7 @@ function drawFlow(time) {
   const c = $('flow'), dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
   if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
   const x = c.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, w, h);
-  const shown = [...document.querySelectorAll('.node:not(.skip)')];
+  const shown = [...document.querySelectorAll('.node')];
   const y = h / 2, gap = 29, seg = w / (shown.length - 1);
   for (let i = 0; i < shown.length - 1; i++) {
     const a = i * seg + gap, b = (i + 1) * seg - gap;

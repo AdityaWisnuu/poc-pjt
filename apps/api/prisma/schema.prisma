@@ -9,6 +9,7 @@ datasource db {
 
 enum TransactionStatus {
   CREATED
+  SENDING_ASSET
   SELLING_ASSET
   BUYING_IDRX
   SENDING_IDRX

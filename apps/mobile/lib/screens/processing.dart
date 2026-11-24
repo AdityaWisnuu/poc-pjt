@@ -18,27 +18,21 @@ class _Stage {
 }
 
 List<_Stage> _stagesFor(String asset) => [
-  if (asset == 'IDRX')
-    const _Stage(
-      ['CREATED', 'SENDING_IDRX'],
-      'Mengirim IDRX',
-      'Tanpa konversi, langsung ke akun settlement',
-    )
-  else ...[
-    _Stage(['CREATED', 'SELLING_ASSET'], 'Menjual $asset', '$asset ke rupiah'),
-    const _Stage(
-      ['BUYING_IDRX'],
-      'Membeli IDRX',
-      'Rupiah ke stablecoin rupiah',
-    ),
-    const _Stage(['SENDING_IDRX'], 'Mengirim IDRX', 'Ke akun settlement'),
-  ],
+  _Stage(
+    ['CREATED', 'SENDING_ASSET'],
+    'Mengirim $asset',
+    'Ke Settlement Account',
+  ),
   const _Stage(
     ['AWAITING_RECEIPT'],
-    'Memastikan dana masuk',
-    'Verifikasi penerimaan',
+    'Dana diterima',
+    'Terverifikasi di riwayat transfer',
   ),
-  const _Stage(['PAYING_MERCHANT'], 'Membayar merchant', 'Rupiah lewat QRIS'),
+  const _Stage(
+    ['PAYING_MERCHANT'],
+    'Membayar merchant',
+    'Rupiah lewat QRIS · simulasi',
+  ),
 ];
 
 class ProcessingScreen extends StatefulWidget {

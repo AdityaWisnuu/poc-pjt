@@ -46,13 +46,19 @@ class PaymentOption {
       name = json['name'] as String,
       amount = json['amount'] as String,
       rate = json['rate'] as int,
-      sufficient = json['sufficient'] as bool;
+      sufficient = json['sufficient'] as bool,
+      blocked = json['blocked'] as String?;
 
   final String asset;
   final String name;
   final String amount;
   final int rate;
   final bool sufficient;
+
+  /// Why this asset cannot be sent right now, or null when it can.
+  final String? blocked;
+
+  bool get payable => blocked == null && sufficient;
 }
 
 class Quote {
@@ -66,6 +72,7 @@ class Quote {
       assetAmount = json['assetAmount'] as String?,
       rate = json['rate'] as int?,
       sufficient = json['sufficient'] as bool? ?? false,
+      blocked = json['blocked'] as String?,
       options = ((json['options'] as List?) ?? const [])
           .map((item) => PaymentOption.fromJson(item as Map<String, dynamic>))
           .toList(),
@@ -85,6 +92,7 @@ class Quote {
   final String? assetAmount;
   final int? rate;
   final bool sufficient;
+  final String? blocked;
   final List<PaymentOption> options;
   final DateTime? expiresAt;
   final int? minIdr;
@@ -102,6 +110,10 @@ class Order {
       assetAmount = json['assetAmount'] as String,
       feeIdr = json['feeIdr'] as int,
       failureReason = json['failureReason'] as String?,
+      mode = json['mode'] as String? ?? 'SIMULATE',
+      txId = (json['transfer'] as Map<String, dynamic>?)?['txId'] as String?,
+      withdrawId =
+          (json['transfer'] as Map<String, dynamic>?)?['withdrawId'] as String?,
       createdAt = DateTime.parse(json['createdAt'] as String),
       completedAt = json['completedAt'] == null
           ? null
@@ -116,6 +128,11 @@ class Order {
   final String assetAmount;
   final int feeIdr;
   final String? failureReason;
+  final String mode;
+
+  /// Exchange transfer reference, the payer's proof the asset left the wallet.
+  final String? txId;
+  final String? withdrawId;
   final DateTime createdAt;
   final DateTime? completedAt;
 

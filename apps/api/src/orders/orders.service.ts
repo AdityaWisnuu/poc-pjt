@@ -23,14 +23,11 @@ import { PrismaService } from '../prisma.service';
 import { parseQris, QrisError } from '../qris/qris';
 import {
   assetToSellForIdr,
-  idrToBuyIdrx,
   InsufficientLiquidityError,
-  MIN_ORDER_IDR,
   MIN_PAYMENT_IDR,
 } from '../quote/quote-math';
 import { SETTLEMENT_GATEWAY, UnknownOutcomeError } from '../settlement/gateway';
 import type { Balances, SettlementGateway } from '../settlement/gateway';
-import { settlementCost } from './settlement-cost';
 
 const QUOTE_TTL_MS = 30_000;
 const ASSETS: PayAsset[] = ['USDC', 'USDT', 'IDRX'];
@@ -41,6 +38,7 @@ const ASSET_NAMES: Record<PayAsset, string> = {
 };
 const ACTIVE: Status[] = [
   'CREATED',
+  'SENDING_ASSET',
   'SELLING_ASSET',
   'BUYING_IDRX',
   'SENDING_IDRX',
@@ -54,10 +52,11 @@ const displayAmount = (asset: PayAsset, amount: Decimal) =>
 interface PaymentOption {
   asset: PayAsset;
   amount: Decimal;
-  buyIdr: number;
   bid: Decimal;
   rate: number;
   sufficient: boolean;
+  /** Null when the asset can be sent now; otherwise why it cannot. */
+  blocked: string | null;
 }
 
 @Injectable()
@@ -76,11 +75,7 @@ export class OrdersService implements OnApplicationBootstrap {
   /** A restart interrupts in-flight work. Live orders are never assumed failed. */
   async onApplicationBootstrap() {
     const interrupted = await this.prisma.transaction.findMany({
-      where: {
-        status: {
-          in: ['CREATED', 'SELLING_ASSET', 'BUYING_IDRX', 'SENDING_IDRX'],
-        },
-      },
+      where: { status: { in: ACTIVE } },
     });
     for (const order of interrupted) {
       const next: Status = order.mode === 'LIVE' ? 'NEEDS_REVIEW' : 'FAILED';
@@ -88,17 +83,15 @@ export class OrdersService implements OnApplicationBootstrap {
         failureReason: 'Proses terhenti karena server restart',
       });
     }
-    const staleSimulated = await this.prisma.transaction.findMany({
-      where: {
-        mode: 'SIMULATE',
-        status: { in: ['AWAITING_RECEIPT', 'PAYING_MERCHANT'] },
-      },
-    });
-    for (const order of staleSimulated) {
-      await this.transition(order.id, order.status, 'FAILED', 'system', {
-        failureReason: 'Proses terhenti karena server restart',
-      });
-    }
+  }
+
+  /** Why `asset` cannot be sent right now, or null when it can. */
+  private blockedReason(asset: PayAsset, amount: Decimal): string | null {
+    if (!this.config.isLive) return null;
+    if (!this.config.liveAssets.includes(asset)) return 'Belum tersedia';
+    const cap = this.config.maxUsdcPerTransfer;
+    if (asset === 'USDC' && amount.gt(cap)) return `Maks. ${cap} USDC`;
+    return null;
   }
 
   async wallet() {
@@ -121,7 +114,7 @@ export class OrdersService implements OnApplicationBootstrap {
         amount: balances[asset].toFixed(asset === 'IDRX' ? 0 : 4),
         idrValue,
         rate: bids[asset].toNumber(),
-        payable: true,
+        payable: !this.config.isLive || this.config.liveAssets.includes(asset),
       };
     });
     return {
@@ -135,37 +128,36 @@ export class OrdersService implements OnApplicationBootstrap {
     amountIdr: number,
     balances: Balances,
   ): Promise<PaymentOption[]> {
-    const [usdc, usdt, idrx] = await Promise.all([
+    const [usdc, usdt] = await Promise.all([
       this.market.depth('usdcidr'),
       this.market.depth('usdtidr'),
-      this.market.depth('idxidr'),
     ]);
     const options: PaymentOption[] = [];
 
-    let buyIdr: number | null = null;
-    try {
-      buyIdr = Math.max(idrToBuyIdrx(idrx.asks, amountIdr), MIN_ORDER_IDR);
-    } catch (error) {
-      if (!(error instanceof InsufficientLiquidityError)) throw error;
-    }
-    if (buyIdr !== null) {
-      for (const [asset, depth] of [
-        ['USDC', usdc],
-        ['USDT', usdt],
-      ] as const) {
-        try {
-          const amount = assetToSellForIdr(depth.bids, buyIdr);
-          options.push({
-            asset,
-            amount,
-            buyIdr,
-            bid: new Decimal(depth.bids[0][0]),
-            rate: new Decimal(amountIdr).div(amount).toDecimalPlaces(0).toNumber(),
-            sufficient: amount.lte(balances[asset]),
-          });
-        } catch (error) {
-          if (!(error instanceof InsufficientLiquidityError)) throw error;
-        }
+    // The Settlement Account sells what it receives, so the payer covers that
+    // sale's fee and a price buffer. USDC and USDT carry 6 decimals.
+    for (const [asset, depth] of [
+      ['USDC', usdc],
+      ['USDT', usdt],
+    ] as const) {
+      try {
+        const amount = assetToSellForIdr(depth.bids, amountIdr).toDecimalPlaces(
+          6,
+          Decimal.ROUND_UP,
+        );
+        options.push({
+          asset,
+          amount,
+          bid: new Decimal(depth.bids[0][0]),
+          rate: new Decimal(amountIdr)
+            .div(amount)
+            .toDecimalPlaces(0)
+            .toNumber(),
+          sufficient: amount.lte(balances[asset]),
+          blocked: this.blockedReason(asset, amount),
+        });
+      } catch (error) {
+        if (!(error instanceof InsufficientLiquidityError)) throw error;
       }
     }
 
@@ -173,10 +165,10 @@ export class OrdersService implements OnApplicationBootstrap {
     options.push({
       asset: 'IDRX',
       amount,
-      buyIdr: 0,
       bid: new Decimal(1),
       rate: 1,
       sufficient: amount.lte(balances.IDRX),
+      blocked: this.blockedReason('IDRX', amount),
     });
     return options;
   }
@@ -217,12 +209,13 @@ export class OrdersService implements OnApplicationBootstrap {
     const options = await this.paymentOptions(amountIdr, balances);
     const selected = requested
       ? options.find((option) => option.asset === requested)
-      : (options.find((option) => option.sufficient) ?? options[0]);
+      : (options.find((option) => !option.blocked && option.sufficient) ??
+        options.find((option) => !option.blocked) ??
+        options[0]);
     if (!selected) {
       throw new BadRequestException('Likuiditas sedang tidak cukup');
     }
 
-    const idrxDepth = await this.market.depth('idxidr');
     const quote = await this.prisma.quote.create({
       data: {
         id: uuidv7(),
@@ -230,11 +223,11 @@ export class OrdersService implements OnApplicationBootstrap {
         merchantName: parsed.merchantName,
         merchantCity: parsed.merchantCity,
         amountIdr,
-        buyIdr: selected.buyIdr,
+        buyIdr: 0,
         asset: selected.asset,
         assetAmount: selected.amount.toFixed(8),
         assetIdrBid: selected.bid.toFixed(4),
-        idrxIdrAsk: idrxDepth.asks[0][0],
+        idrxIdrAsk: 0,
         expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
       },
     });
@@ -248,12 +241,14 @@ export class OrdersService implements OnApplicationBootstrap {
       assetAmount: displayAmount(selected.asset, selected.amount),
       rate: selected.rate,
       sufficient: selected.sufficient,
+      blocked: selected.blocked,
       options: options.map((option) => ({
         asset: option.asset,
         name: ASSET_NAMES[option.asset],
         amount: displayAmount(option.asset, option.amount),
         rate: option.rate,
         sufficient: option.sufficient,
+        blocked: option.blocked,
       })),
       expiresAt: quote.expiresAt.toISOString(),
       ttlSeconds: QUOTE_TTL_MS / 1000,
@@ -268,13 +263,22 @@ export class OrdersService implements OnApplicationBootstrap {
       throw new ConflictException('Masih ada pembayaran yang berjalan');
     }
 
-    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
+    const quote = await this.prisma.quote.findUnique({
+      where: { id: quoteId },
+    });
     if (!quote) throw new NotFoundException('Kurs tidak ditemukan');
     if (quote.expiresAt.getTime() < Date.now()) {
       throw new GoneException('Kurs sudah kedaluwarsa');
     }
+    const planned = new Decimal(quote.assetAmount.toString());
+    const blocked = this.blockedReason(quote.asset, planned);
+    if (blocked) {
+      throw new BadRequestException(
+        `${quote.asset} tidak bisa dipakai: ${blocked}`,
+      );
+    }
     const balances = await this.gateway.balances();
-    if (new Decimal(quote.assetAmount.toString()).gt(balances[quote.asset])) {
+    if (planned.gt(balances[quote.asset])) {
       throw new BadRequestException(`Saldo ${quote.asset} tidak cukup`);
     }
 
@@ -308,7 +312,7 @@ export class OrdersService implements OnApplicationBootstrap {
     });
     this.changes.next(order.id);
 
-    void this.run(order.id, quote.buyIdr);
+    void this.run(order.id);
     return this.present(order.id);
   }
 
@@ -352,18 +356,13 @@ export class OrdersService implements OnApplicationBootstrap {
       serverTime: new Date().toISOString(),
       orders: rows.map((row) => {
         const evidence = row.evidence as Record<string, any>;
-        const cost =
-          row.asset === 'IDRX' ? { idr: 0, bps: 0 } : settlementCost(evidence);
         return {
           ...this.summary(row),
           quote: {
             assetIdrBid: row.quote.assetIdrBid.toString(),
-            idrxIdrAsk: row.quote.idrxIdrAsk.toString(),
             assetPlanned: row.quote.assetAmount.toString(),
           },
           evidence,
-          costIdr: cost?.idr ?? null,
-          costBps: cost?.bps ?? null,
           totalMs: row.completedAt
             ? row.completedAt.getTime() - row.createdAt.getTime()
             : null,
@@ -422,17 +421,23 @@ export class OrdersService implements OnApplicationBootstrap {
 
   async operatorPaid(id: string) {
     const order = await this.requireLive(id);
-    const moved = await this.transition(id, 'PAYING_MERCHANT', 'SUCCESS', 'operator', {
-      completedAt: new Date(),
-      evidence: {
-        ...(order.evidence as Prisma.JsonObject),
-        payment: {
-          executedBy: 'Settlement Operator',
-          channel: 'QRIS',
-          amountIdr: order.amountIdr,
+    const moved = await this.transition(
+      id,
+      'PAYING_MERCHANT',
+      'SUCCESS',
+      'operator',
+      {
+        completedAt: new Date(),
+        evidence: {
+          ...(order.evidence as Prisma.JsonObject),
+          payment: {
+            executedBy: 'Settlement Operator',
+            channel: 'QRIS',
+            amountIdr: order.amountIdr,
+          },
         },
       },
-    });
+    );
     if (!moved) throw new ConflictException('Status pembayaran tidak sesuai');
     return this.present(id);
   }
@@ -446,14 +451,25 @@ export class OrdersService implements OnApplicationBootstrap {
     return order;
   }
 
-  private async run(id: string, buyIdr: number) {
+  /**
+   * Funding Leg is real in live mode: the payer's asset goes to the Settlement
+   * Account and Indodax's history proves it. The Payment Leg (conversion at
+   * the Settlement Operator and QRIS payout) is simulated for this PoC.
+   */
+  private async run(id: string) {
     let current: Status = 'CREATED';
     const evidence: Record<string, Prisma.InputJsonValue> = {};
     const step = async (
       next: Status,
       data: Parameters<OrdersService['transition']>[4] = {},
     ) => {
-      const moved = await this.transition(id, current, next, 'settlement', data);
+      const moved = await this.transition(
+        id,
+        current,
+        next,
+        'settlement',
+        data,
+      );
       if (!moved) throw new Error(`Transisi ${current} -> ${next} gagal`);
       current = next;
     };
@@ -462,93 +478,49 @@ export class OrdersService implements OnApplicationBootstrap {
       const order = await this.prisma.transaction.findUniqueOrThrow({
         where: { id },
       });
-      const sendAmount = new Decimal(order.amountIdr);
+      const amount = new Decimal(order.assetPlanned.toString());
       const before = await this.readBalance(order.asset);
 
-      if (order.asset === 'IDRX') {
-        // Already a rupiah stablecoin, so the Funding Leg needs no conversion.
-        await pause(500);
-        await step('SENDING_IDRX', {
-          assetSold: sendAmount.toFixed(8),
-          idrxBought: sendAmount.toFixed(2),
-        });
-      } else {
-        await step('SELLING_ASSET');
-        const sold = await this.gateway.sellAsset(
-          order.asset,
-          new Decimal(order.assetPlanned.toString()),
-          order.sellClientOrderId,
-        );
-        evidence.sell = {
-          reference: sold.reference,
-          amount: sold.assetSold.toFixed(6),
-          avgPrice: sold.avgPrice.toDecimalPlaces(2).toString(),
-          grossIdr: sold.grossIdr,
-          feeIdr: sold.feeIdr,
-          netIdr: sold.idrNet,
-        };
-        await step('BUYING_IDRX', {
-          assetSold: sold.assetSold.toFixed(8),
-          idrProceeds: sold.idrNet,
-          feeIdr: sold.feeIdr,
-          evidence: { ...evidence },
-        });
-
-        if (sold.idrNet < buyIdr) {
-          throw new Error('Hasil konversi kurang, dana tersimpan sebagai IDR');
-        }
-        const bought = await this.gateway.buyIdrx(buyIdr, order.buyClientOrderId);
-        evidence.buy = {
-          reference: bought.reference,
-          idrSpent: buyIdr,
-          idrx: bought.idrxBought.toFixed(0),
-          avgPrice: bought.avgPrice.toDecimalPlaces(4).toString(),
-          feeIdr: bought.feeIdr,
-        };
-        if (bought.idrxBought.lt(order.amountIdr)) {
-          throw new Error('IDRX yang didapat kurang, dana tersimpan sebagai IDRX');
-        }
-        await step('SENDING_IDRX', {
-          idrxBought: bought.idrxBought.toFixed(2),
-          feeIdr: sold.feeIdr + bought.feeIdr,
-          evidence: { ...evidence },
-        });
-      }
-
-      const transfer = await this.gateway.sendIdrx(
-        sendAmount,
+      await step('SENDING_ASSET');
+      const transfer = await this.gateway.sendAsset(
+        order.asset,
+        amount,
         order.withdrawRequestId,
       );
       evidence.transfer = {
-        reference: transfer.reference,
-        idrx: sendAmount.toFixed(0),
-        feeIdrx: transfer.feeIdrx,
+        asset: order.asset,
+        amount: displayAmount(order.asset, amount),
+        withdrawId: transfer.withdrawId,
+        txId: transfer.txId,
+        fee: transfer.fee,
+        appliedAt: transfer.appliedAt,
+        completedAt: transfer.completedAt,
         destination: 'Settlement Account',
         authorization: 'approved',
       };
       const after = await this.readBalance(order.asset);
       if (before && after) evidence.balances = { before, after };
+      evidence.funding = {
+        confirmedBy: order.mode === 'LIVE' ? 'Riwayat WD Indodax' : 'Simulasi',
+        status: 'success',
+      };
       await step('AWAITING_RECEIPT', {
-        idrxSent: sendAmount.toFixed(2),
+        assetSold: amount.toFixed(8),
         evidence: { ...evidence },
       });
 
-      // Live orders wait here for the Settlement Operator's confirmations.
-      if (order.mode === 'SIMULATE') {
-        await pause(1100);
-        evidence.funding = { confirmedBy: 'Simulasi' };
-        await step('PAYING_MERCHANT', { evidence: { ...evidence } });
-        await pause(1300);
-        evidence.payment = {
-          executedBy: 'Simulasi',
-          channel: 'QRIS',
-          amountIdr: order.amountIdr,
-        };
-        await step('SUCCESS', {
-          completedAt: new Date(),
-          evidence: { ...evidence },
-        });
-      }
+      await pause(900);
+      await step('PAYING_MERCHANT', { evidence: { ...evidence } });
+      await pause(1300);
+      evidence.payment = {
+        executedBy: 'Simulasi',
+        channel: 'QRIS',
+        amountIdr: order.amountIdr,
+      };
+      await step('SUCCESS', {
+        completedAt: new Date(),
+        evidence: { ...evidence },
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Kesalahan';
       const next: Status =
@@ -610,7 +582,15 @@ export class OrdersService implements OnApplicationBootstrap {
   }
 
   private summary(order: Transaction) {
+    const transfer = (order.evidence as Record<string, any> | null)?.transfer;
     return {
+      transfer: transfer
+        ? {
+            withdrawId: transfer.withdrawId ?? null,
+            txId: transfer.txId ?? null,
+            completedAt: transfer.completedAt ?? null,
+          }
+        : null,
       id: order.id,
       mode: order.mode,
       status: order.status,

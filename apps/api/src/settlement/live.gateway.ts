@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { PayAsset } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { AppConfig } from '../config';
 import {
@@ -23,7 +24,21 @@ interface OrderResponse {
   orderId?: number;
 }
 
+interface WithdrawalRow {
+  id: string | number;
+  txId?: string;
+  transactionFee?: string;
+  withdrawStatus?: string;
+  status?: string;
+  applyTime?: string;
+  completeTime?: string;
+}
+
 const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+/** History times are UTC without a zone ("2026-11-24 01:53:31"), verified against WIB receipts. */
+const indodaxTime = (value?: string) =>
+  value ? new Date(`${value.replace(' ', 'T')}Z`).toISOString() : null;
 const sum = (fills: Fill[], key: keyof Fill) =>
   fills.reduce((total, fill) => total.plus(fill[key]), new Decimal(0));
 
@@ -93,8 +108,22 @@ export class LiveGateway implements SettlementGateway {
     };
   }
 
-  async sendIdrx(amount: Decimal, requestId: string): Promise<TransferResult> {
+  /**
+   * Registers the intent with the Settlement Account's callback, applies the
+   * withdrawal once, then reads Indodax's own withdrawal history as proof.
+   */
+  async sendAsset(
+    asset: PayAsset,
+    amount: Decimal,
+    requestId: string,
+  ): Promise<TransferResult> {
+    if (!this.config.liveAssets.includes(asset)) {
+      throw new Error(`${asset} belum diizinkan untuk transfer live`);
+    }
+    const coin = asset === 'IDRX' ? 'IDX' : asset;
+    const quantity = amount.toFixed(asset === 'IDRX' ? 0 : 6);
     const username = this.config.settlementUsername;
+
     const intent = await fetch(
       `${this.config.callbackBaseUrl}/internal/withdrawals`,
       {
@@ -105,31 +134,64 @@ export class LiveGateway implements SettlementGateway {
         },
         body: JSON.stringify({
           request_id: requestId,
-          currency: 'idx',
-          amount: amount.toFixed(0),
+          currency: coin.toLowerCase(),
+          amount: quantity,
           username,
         }),
         signal: AbortSignal.timeout(8000),
       },
     );
     if (!intent.ok) {
-      throw new Error(`Callback menolak intent (${intent.status})`);
+      throw new Error(`Callback menolak izin transfer (${intent.status})`);
     }
 
-    const withdrawal = await this.indodax.post<{
-      id?: string;
-      transactionFee?: string;
-    }>('/api/v2/capital/withdraw/apply', {
-      coin: 'IDX',
-      amount: amount.toFixed(0),
-      withdrawOrderId: requestId,
-      withdrawMethod: 'username',
-      withdrawUsername: username,
-    });
-    return {
-      reference: withdrawal.id ?? requestId,
-      feeIdrx: withdrawal.transactionFee ?? '0',
-    };
+    const applied = await this.indodax.post<{ id?: string }>(
+      '/api/v2/capital/withdraw/apply',
+      {
+        coin,
+        amount: quantity,
+        withdrawOrderId: requestId,
+        withdrawMethod: 'username',
+        withdrawUsername: username,
+      },
+    );
+    if (!applied.id) {
+      throw new UnknownOutcomeError('Indodax tidak mengembalikan ID transfer');
+    }
+    return this.waitForWithdrawal(coin, applied.id);
+  }
+
+  /** The apply response returns "usdc-106796"; history lists the same row as "106796". */
+  private async waitForWithdrawal(
+    coin: string,
+    appliedId: string,
+  ): Promise<TransferResult> {
+    const numericId = appliedId.split('-').pop();
+    let lastStatus = 'belum terlihat';
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const history = await this.indodax.get<
+        WithdrawalRow[] | { data?: WithdrawalRow[] }
+      >('/api/v2/capital/withdraw/history', { coin: coin.toLowerCase() });
+      const rows = Array.isArray(history) ? history : (history.data ?? []);
+      const row = rows.find((item) => String(item.id) === numericId);
+      if (row) {
+        lastStatus = String(row.withdrawStatus ?? row.status ?? 'unknown');
+        if (lastStatus.toLowerCase() === 'success') {
+          return {
+            withdrawId: String(row.id),
+            txId: row.txId ?? '',
+            fee: String(row.transactionFee ?? '0'),
+            appliedAt: indodaxTime(row.applyTime),
+            completedAt: indodaxTime(row.completeTime),
+          };
+        }
+      }
+      await pause(1500);
+    }
+    // Funds may already have moved, so a human checks instead of a retry.
+    throw new UnknownOutcomeError(
+      `Transfer ${appliedId} terkirim, status terakhir: ${lastStatus}`,
+    );
   }
 
   private async waitForFills(symbol: string, clientOrderId: string) {

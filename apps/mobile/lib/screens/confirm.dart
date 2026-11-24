@@ -89,6 +89,10 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
   }
 
   void _select(PaymentOption option) {
+    if (option.blocked != null) {
+      HapticFeedback.heavyImpact();
+      return;
+    }
     if (option.asset == (_pendingAsset ?? _quote.asset)) return;
     HapticFeedback.selectionClick();
     _refresh(option.asset);
@@ -113,7 +117,11 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
     final expired = _remaining <= 0;
     final message =
         _error ??
-        (!_refreshing && !_quote.sufficient
+        (_refreshing
+            ? null
+            : _quote.blocked != null
+            ? '${_quote.asset}: ${_quote.blocked}'
+            : !_quote.sufficient
             ? 'Saldo ${_quote.asset} tidak cukup'
             : null);
 
@@ -182,7 +190,10 @@ class _ConfirmScreenState extends State<ConfirmScreen> {
                           )
                         : SlideToPay(
                             label: 'Geser untuk bayar',
-                            enabled: _quote.sufficient && !_refreshing,
+                            enabled:
+                                _quote.sufficient &&
+                                _quote.blocked == null &&
+                                !_refreshing,
                             onComplete: _pay,
                           ),
                   ),
@@ -302,7 +313,7 @@ class _AssetOption extends StatelessWidget {
         ),
       ),
       child: AnimatedOpacity(
-        opacity: option.sufficient ? 1 : 0.46,
+        opacity: option.payable ? 1 : 0.46,
         duration: const Duration(milliseconds: 200),
         child: Row(
           children: [
@@ -316,10 +327,11 @@ class _AssetOption extends StatelessWidget {
                   Text(option.asset, style: type(15, weight: 700)),
                   const SizedBox(height: 1),
                   Text(
-                    option.sufficient ? option.name : 'Saldo kurang',
+                    option.blocked ??
+                        (option.sufficient ? option.name : 'Saldo kurang'),
                     style: type(
                       12,
-                      color: option.sufficient ? Palette.muted : Palette.coral,
+                      color: option.payable ? Palette.muted : Palette.coral,
                     ),
                   ),
                 ],

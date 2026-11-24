@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { PayAsset } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { AppConfig } from '../config';
 import { MarketService } from '../market/market.service';
@@ -77,8 +78,19 @@ export class SimGateway implements SettlementGateway {
     };
   }
 
-  async sendIdrx(_amount: Decimal, requestId: string): Promise<TransferResult> {
+  async sendAsset(
+    asset: PayAsset,
+    _amount: Decimal,
+    requestId: string,
+  ): Promise<TransferResult> {
+    const appliedAt = new Date().toISOString();
     await pause(1200);
-    return { reference: simReference(requestId), feeIdrx: '0' };
+    return {
+      withdrawId: simReference(requestId),
+      txId: `SIM-${asset}-${requestId.slice(-8).toUpperCase()}`,
+      fee: '0',
+      appliedAt,
+      completedAt: new Date().toISOString(),
+    };
   }
 }

@@ -17,6 +17,19 @@ export class AppConfig {
     return Number(this.env.get('MAX_IDR_PER_RUN') ?? 100000);
   }
 
+  /** Assets the Settlement Account's callback currently authorizes. */
+  get liveAssets(): string[] {
+    return (this.env.get<string>('LIVE_ASSETS') ?? 'USDC')
+      .split(',')
+      .map((asset) => asset.trim().toUpperCase())
+      .filter(Boolean);
+  }
+
+  /** Mirrors the callback's per-withdrawal cap, so the app never asks for more. */
+  get maxUsdcPerTransfer(): number {
+    return Number(this.env.get('MAX_USDC_PER_TRANSFER') ?? 5);
+  }
+
   get port(): number {
     return Number(this.env.get('PORT') ?? 3000);
   }

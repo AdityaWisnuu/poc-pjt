@@ -119,6 +119,8 @@ class _SuccessScreenState extends State<SuccessScreen>
           'Dibayar',
           '${tokenAmount(order.asset, order.assetAmount)} ${order.asset}',
         ),
+        if (order.txId != null && order.txId!.isNotEmpty)
+          _line('TxID', order.txId!),
         _line('Waktu', wibTime(order.completedAt ?? order.createdAt)),
         _line('ID', order.id.substring(order.id.length - 12).toUpperCase()),
       ],
