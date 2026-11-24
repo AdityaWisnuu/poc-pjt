@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PJT Remittance Console</title>
+<link rel="icon" href="data:,">
+<style>
+@font-face { font-family: "Jakarta"; src: url("/console/assets/font.ttf") format("truetype"); font-weight: 200 800; }
+:root {
+  --ink: #07080c; --surface: #111319; --surface-2: #1a1d25; --line: rgba(255,255,255,.075);
+  --text: #f6f7f9; --muted: #9398a6; --faint: #5e6371; --mint: #22edb3; --coral: #ff6645; --cobalt: #3f63ff;
+  --typeA: #22edb3; --typeB: #8fa8ff; --typeC: #ffc857; --typeD: #ff6645;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; background: var(--ink); color: var(--text); font-family: "Jakarta", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.app { height: 100vh; min-height: 720px; display: grid; grid-template-rows: 62px minmax(0, 1fr) 112px; gap: 14px; padding: 14px 20px 18px; }
+header { display: flex; align-items: center; gap: 14px; }
+.brand { font-size: 27px; font-weight: 800; letter-spacing: -.055em; }
+.title { color: var(--muted); font-size: 15px; font-weight: 600; padding-left: 14px; border-left: 1px solid var(--line); }
+.head-right { margin-left: auto; display: flex; gap: 24px; align-items: center; color: var(--muted); font-size: 13.5px; font-weight: 600; }
+.head-right a { color: var(--muted); text-decoration: none; }
+.head-right a:hover { color: var(--text); }
+.head-right b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+#mode.live { color: var(--mint); }
+main { min-height: 0; display: grid; grid-template-columns: minmax(420px, 5fr) minmax(560px, 7fr); gap: 14px; }
+
+.hero { position: relative; overflow: hidden; border-radius: 30px; background: var(--surface); display: flex; flex-direction: column; padding: 30px; min-height: 0; }
+.hero::before { content: ""; position: absolute; inset: -40% -20% auto auto; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgba(63,99,255,.35), transparent); filter: blur(10px); transition: background .6s; }
+.hero.ok::before { background: radial-gradient(closest-side, rgba(34,237,179,.38), transparent); }
+.hero.bad::before { background: radial-gradient(closest-side, rgba(255,102,69,.3), transparent); }
+.hero > * { position: relative; }
+.route { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 650; color: rgba(255,255,255,.88); }
+.badge { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; font-weight: 800; font-size: 14px; }
+.amount { margin-top: 14px; font-size: clamp(48px, 5.6vw, 84px); line-height: 1.02; font-weight: 750; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.who { margin-top: 10px; font-size: 18px; font-weight: 650; color: rgba(255,255,255,.92); min-height: 24px; }
+.why { margin-top: 10px; font-size: 13.5px; color: var(--muted); max-width: 520px; line-height: 1.45; }
+.failure { margin-top: 12px; color: #ffd8cf; font-size: 14px; font-weight: 600; }
+.flow { margin-top: auto; display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 10px; background: rgba(7,8,12,.78); border: 1px solid var(--line); border-radius: 24px; padding: 18px 20px; }
+.end small { display: block; font-size: 12px; font-weight: 650; color: var(--muted); }
+.end b { display: block; margin-top: 4px; font-size: 17px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.end.mid { text-align: center; }
+.end.last { text-align: right; }
+.arrow { color: var(--faint); font-size: 18px; }
+
+.rail { background: var(--surface); border: 1px solid var(--line); border-radius: 30px; padding: 14px 22px; min-height: 0; overflow: auto; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+.step { position: relative; display: grid; grid-template-columns: 46px minmax(190px, 270px) minmax(0, 1fr) 64px; align-items: center; min-height: 58px; opacity: .36; transition: opacity .4s; }
+.step.done, .step.active, .step.failed { opacity: 1; }
+.step::before { content: ""; position: absolute; left: 13px; top: 41px; height: calc(100% - 27px); width: 2px; border-radius: 2px; background: var(--surface-2); }
+.step.last::before { display: none; }
+.step.done::before { background: linear-gradient(var(--mint), rgba(34,237,179,.3)); }
+.dot { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; color: var(--ink); }
+.step.done .dot { background: var(--mint); }
+.step.failed .dot { background: var(--coral); }
+.step.active .dot { background: transparent; border: 3px solid var(--surface-2); border-top-color: var(--text); animation: spin .8s linear infinite; }
+.dot svg { width: 15px; height: 15px; display: none; }
+.step.done .check, .step.failed .cross { display: block; }
+.step-name { font-size: 15px; font-weight: 700; display: flex; gap: 8px; align-items: center; }
+.tag { font-size: 10.5px; font-weight: 750; letter-spacing: .04em; padding: 2px 7px; border-radius: 7px; background: rgba(147,152,166,.16); color: var(--muted); }
+.tag.real { background: rgba(34,237,179,.16); color: var(--mint); }
+.step-sub { margin-top: 1px; font-size: 12px; color: var(--muted); }
+.proof { min-width: 0; display: flex; flex-wrap: wrap; gap: 3px 16px; font-family: var(--mono); font-size: 12px; color: var(--muted); line-height: 1.45; }
+.proof b { color: var(--text); font-weight: 550; }
+.proof span { white-space: nowrap; animation: rise .42s ease-out both; }
+.time { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.empty { color: var(--muted); font-size: 15px; text-align: center; }
+
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr) minmax(260px, 1.35fr); gap: 14px; min-height: 0; }
+.metric { background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 17px 20px; min-width: 0; }
+.metric small { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.metric strong { display: block; margin-top: 6px; font-size: clamp(18px, 1.75vw, 26px); font-weight: 750; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metric em { font-style: normal; font-size: .55em; font-weight: 650; color: var(--muted); letter-spacing: 0; margin-left: 3px; }
+.history { padding: 10px 8px; overflow: auto; }
+.history button { width: 100%; display: flex; gap: 10px; justify-content: space-between; padding: 5px 10px; color: var(--muted); background: none; border: 0; border-radius: 10px; font: 600 12.5px "Jakarta", sans-serif; cursor: pointer; }
+.history button:hover, .history button.sel { background: var(--surface-2); color: var(--text); }
+.history span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.history span:last-child { font-variant-numeric: tabular-nums; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+@media (max-width: 1080px) {
+  .app { height: auto; grid-template-rows: auto auto auto; }
+  main { grid-template-columns: 1fr; }
+  .hero { min-height: 460px; }
+  .step { grid-template-columns: 42px 1fr 58px; padding: 6px 0; }
+  .proof { grid-column: 2 / 4; grid-row: 2; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .history { grid-column: 1 / -1; max-height: 150px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">pjt</div>
+    <div class="title">Remittance Console</div>
+    <div class="head-right"><a href="/console">QRIS Console</a><a href="/penerima" target="_blank">Layar penerima</a><span id="mode">—</span><b id="clock">—</b></div>
+  </header>
+  <main>
+    <section class="hero" id="hero">
+      <div class="route"><span class="badge" id="badge">—</span><span id="route">Menunggu transfer</span></div>
+      <div class="amount" id="amount">—</div>
+      <div class="who" id="who"></div>
+      <div class="why" id="why"></div>
+      <div class="failure" id="failure" hidden></div>
+      <div class="flow">
+        <div class="end"><small id="fromLabel">Pengirim</small><b id="fromVal">—</b></div>
+        <div class="arrow">→</div>
+        <div class="end mid"><small>Jalur</small><b id="midVal">—</b></div>
+        <div class="arrow">→</div>
+        <div class="end last"><small id="toLabel">Penerima</small><b id="toVal">—</b></div>
+      </div>
+    </section>
+    <section class="rail" id="rail"><div class="empty">Belum ada remitansi. Kirim dari app.</div></section>
+  </main>
+  <section class="metrics">
+    <div class="metric"><small>Waktu end-to-end</small><strong id="mTime">—</strong></div>
+    <div class="metric"><small>Kurs efektif</small><strong id="mRate">—</strong></div>
+    <div class="metric"><small>Saldo USDC</small><strong id="mBalance">—</strong></div>
+    <div class="metric"><small>Tipe negara</small><strong id="mType">—</strong></div>
+    <div class="metric history" id="history"></div>
+  </section>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const RAIL = { crypto: 'Kripto end-to-end', b2b: 'USDC antar lembaga', fiat: 'Fiat, tanpa kripto' };
+const SYMBOL = { IDR: 'Rp', JPY: '¥', KRW: '₩', MYR: 'RM', TWD: 'NT$', HKD: 'HK$', SGD: 'S$', BND: 'B$' };
+const money = (v, c) => {
+  if (v == null) return '—';
+  if (c === 'USDC') return Number(v).toLocaleString('id-ID', { minimumFractionDigits: 6, maximumFractionDigits: 6 }) + ' USDC';
+  const whole = ['IDR', 'JPY', 'KRW'].includes(c);
+  const t = Number(v).toLocaleString('id-ID', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
+  return SYMBOL[c] ? SYMBOL[c] + t : c + ' ' + t;
+};
+const wib = (iso) => new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(iso)).replaceAll(':', '.');
+const secs = (ms) => (ms / 1000).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'd';
+
+let state = null, selected = null, follow = true;
+
+function proofs(item, status) {
+  const e = item.evidence || {};
+  if (status === 'SCREENING' && e.screening) return [['Daftar', 'contoh DTTOT'], ['Hasil', e.screening.result]];
+  if (status === 'COLLECTING' && e.collection) return [['Oleh', e.collection.by], ['Jumlah', money(e.collection.amount, e.collection.currency)], ...(e.collection.reference ? [['Ref', e.collection.reference]] : []), ...(e.collection.purchase ? [['Beli', e.collection.purchase]] : [])];
+  if (status === 'SENDING_ASSET' && e.transfer) return [['WD', e.transfer.withdrawId], ['TxID', e.transfer.txId], ['Kirim', money(e.transfer.amount, 'USDC')], ['Arah', e.transfer.from + ' → ' + e.transfer.to]];
+  if (status === 'CONVERTING' && e.conversion) return [['Pasangan', e.conversion.pair], ['Harga', Number(e.conversion.price).toLocaleString('id-ID')], ...(e.conversion.locked ? [['Pasar', 'Rp' + Number(e.conversion.net).toLocaleString('id-ID')], ['Dikunci', 'Rp' + Number(e.conversion.locked).toLocaleString('id-ID')]] : [['Hasil', e.conversion.net]])];
+  if (status === 'PAYING_OUT' && e.payout) return [['Kanal', e.payout.channel], ['Ref', e.payout.reference], ...(e.payout.responseCode ? [['Kode', e.payout.responseCode]] : []), ['Ke', e.payout.bank + ' ' + e.payout.account]];
+  return [];
+}
+
+function renderRail(item) {
+  const rail = $('rail');
+  const key = item.id + item.steps.map((s) => s.status).join();
+  if (rail.dataset.key !== key) {
+    rail.dataset.key = key;
+    rail.replaceChildren(...item.steps.map((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'step';
+      row.dataset.status = s.status;
+      row.innerHTML = '<div class="dot"><svg class="check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 6.5 12 13 4.5"/></svg><svg class="cross" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg></div><div><div class="step-name"><span></span><i class="tag"></i></div><div class="step-sub"></div></div><div class="proof"></div><div class="time"></div>';
+      row.querySelector('.step-name span').textContent = s.label;
+      const tag = row.querySelector('.tag');
+      const real = s.real && item.mode === 'LIVE';
+      tag.textContent = real ? 'ASLI' : 'SIMULASI';
+      tag.className = 'tag' + (real ? ' real' : '');
+      row.querySelector('.step-sub').textContent = s.detail;
+      return row;
+    }));
+  }
+  const failed = item.status === 'FAILED' || item.status === 'NEEDS_REVIEW';
+  const order = item.steps.map((s) => s.status);
+  const reached = item.timeline.map((t) => t.status).filter((s) => order.includes(s));
+  const idx = item.status === 'SUCCESS' ? order.length : failed ? Math.max(-1, ...reached.map((s) => order.indexOf(s))) : order.indexOf(item.status);
+  [...rail.children].forEach((row, i) => {
+    const cls = 'step' + (i === order.length - 1 ? ' last' : '') + (i < idx ? ' done' : i === idx ? (failed ? ' failed' : ' active') : '');
+    if (row.className !== cls) row.className = cls;
+    const p = proofs(item, order[i]);
+    const box = row.querySelector('.proof');
+    const k = JSON.stringify(p);
+    if (box.dataset.key !== k) {
+      box.dataset.key = k;
+      box.replaceChildren(...p.map(([a, b], n) => {
+        const span = document.createElement('span'); span.style.animationDelay = n * 55 + 'ms';
+        span.append(a + ' '); const v = document.createElement('b'); v.textContent = b; span.append(v); return span;
+      }));
+    }
+    const start = item.timeline.find((t) => t.status === order[i]);
+    const next = item.timeline.find((t) => t.status === (order[i + 1] || 'SUCCESS'));
+    row.querySelector('.time').textContent = start && next ? secs(new Date(next.at) - new Date(start.at)) : '';
+  });
+}
+
+function render() {
+  if (!state) return;
+  $('mode').textContent = state.mode === 'live' ? 'Live' : 'Mode simulasi';
+  $('mode').className = state.mode === 'live' ? 'live' : '';
+  renderHistory();
+  const item = state.items.find((x) => x.id === selected) || state.items[0];
+  if (!item) return;
+  selected = item.id;
+  const c = item.corridor || {};
+  const inbound = item.direction === 'INBOUND';
+  const failed = item.status === 'FAILED' || item.status === 'NEEDS_REVIEW';
+  $('hero').className = 'hero' + (item.status === 'SUCCESS' ? ' ok' : failed ? ' bad' : '');
+  $('badge').textContent = c.type || '—';
+  $('badge').style.background = `color-mix(in srgb, var(--type${c.type}) 18%, transparent)`;
+  $('badge').style.color = `var(--type${c.type})`;
+  $('route').textContent = (inbound ? `${c.country} → Indonesia` : `Indonesia → ${c.country}`) + ' · ' + (RAIL[c.rail] || '');
+  $('amount').textContent = money(item.receiveAmount, item.receiveCurrency);
+  $('who').textContent = `ke ${item.recipient.name} · ${item.recipient.bankName} ${item.recipient.account}`;
+  $('why').textContent = `${c.typeLabel}: ${c.reason}. Mitra: ${c.partner}.`;
+  $('failure').hidden = !failed;
+  $('failure').textContent = failed ? item.failureReason || 'Terjadi kesalahan' : '';
+  $('fromLabel').textContent = `${item.sender.name} · ${item.sender.country}`;
+  $('fromVal').textContent = money(item.sendAmount, item.fundingCurrency);
+  $('midVal').textContent = Number(item.usdcAmount) > 0 ? money(item.usdcAmount, 'USDC') : 'Tanpa kripto';
+  $('toLabel').textContent = `${item.recipient.name} · ${item.recipient.country}`;
+  $('toVal').textContent = item.status === 'SUCCESS' ? money(item.receiveAmount, item.receiveCurrency) : '—';
+  renderRail(item);
+  const e = item.evidence || {};
+  $('mTime').textContent = item.totalMs != null ? secs(item.totalMs) : failed ? '—' : 'Berjalan';
+  $('mRate').replaceChildren();
+  if (e.pricing) {
+    const [left, right] = e.pricing.rate.split(' = ');
+    $('mRate').append(right);
+    const u = document.createElement('em'); u.textContent = 'per ' + left.replace(/^1 /, ''); $('mRate').append(u);
+  } else $('mRate').textContent = '—';
+  $('mBalance').replaceChildren();
+  if (e.transfer && e.transfer.balances) {
+    $('mBalance').append(Number(e.transfer.balances.after).toLocaleString('id-ID', { minimumFractionDigits: 4 }));
+    const u = document.createElement('em'); u.textContent = 'dari ' + Number(e.transfer.balances.before).toLocaleString('id-ID', { minimumFractionDigits: 4 }); $('mBalance').append(u);
+  } else $('mBalance').textContent = Number(item.usdcAmount) > 0 ? '—' : 'Tidak dipakai';
+  $('mType').replaceChildren();
+  if (c.type) {
+    $('mType').append(c.type);
+    const u = document.createElement('em'); u.textContent = c.typeLabel; $('mType').append(u);
+  } else $('mType').textContent = '—';
+}
+
+function renderHistory() {
+  const box = $('history');
+  const key = JSON.stringify(state.items.map((o) => [o.id, o.status])) + selected;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.replaceChildren(...state.items.slice(0, 6).map((o) => {
+    const b = document.createElement('button');
+    if (o.id === selected) b.className = 'sel';
+    const a = document.createElement('span');
+    a.textContent = (o.direction === 'INBOUND' ? o.corridor?.code + ' → ID' : 'ID → ' + o.corridor?.code) + ' · ' + o.recipient.name;
+    const v = document.createElement('span'); v.textContent = o.status === 'SUCCESS' ? money(o.receiveAmount, o.receiveCurrency) : o.status === 'FAILED' ? 'Gagal' : o.status === 'NEEDS_REVIEW' ? 'Perlu dicek' : 'Berjalan';
+    b.append(a, v);
+    b.onclick = () => { selected = o.id; follow = o.id === state.items[0].id; render(); };
+    return b;
+  }));
+  if (!state.items.length) { const m = document.createElement('small'); m.textContent = 'Belum ada transfer'; m.style.padding = '8px 10px'; box.append(m); }
+}
+
+let fetching = false, again = false;
+async function refresh() {
+  if (fetching) { again = true; return; }
+  fetching = true;
+  try {
+    const next = await (await fetch('/console/remit/state', { cache: 'no-store' })).json();
+    if (follow && next.items[0] && (!state || next.items[0].id !== state.items[0]?.id)) selected = next.items[0].id;
+    state = next;
+    render();
+  } catch {}
+  fetching = false;
+  if (again) { again = false; refresh(); }
+}
+const events = new EventSource('/console/remit/events');
+events.addEventListener('change', refresh);
+events.onopen = refresh;
+setInterval(refresh, 4000);
+setInterval(() => { $('clock').textContent = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date()).replaceAll(':', '.') + ' WIB'; }, 250);
+refresh();
+</script>
+</body>
+</html>

@@ -256,10 +256,28 @@ export class OrdersService implements OnApplicationBootstrap {
   }
 
   async createOrder(quoteId: string) {
-    const active = await this.prisma.transaction.count({
-      where: { status: { in: [...ACTIVE, 'NEEDS_REVIEW'] } },
-    });
-    if (active > 0) {
+    // Remittances share the same transfer path and daily allowance.
+    const [active, remitting] = await Promise.all([
+      this.prisma.transaction.count({
+        where: { status: { in: [...ACTIVE, 'NEEDS_REVIEW'] } },
+      }),
+      this.prisma.remittance.count({
+        where: {
+          status: {
+            in: [
+              'CREATED',
+              'SCREENING',
+              'COLLECTING',
+              'SENDING_ASSET',
+              'CONVERTING',
+              'PAYING_OUT',
+              'NEEDS_REVIEW',
+            ],
+          },
+        },
+      }),
+    ]);
+    if (active + remitting > 0) {
       throw new ConflictException('Masih ada pembayaran yang berjalan');
     }
 

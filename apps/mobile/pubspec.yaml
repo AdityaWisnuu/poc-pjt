@@ -59,6 +59,8 @@ flutter:
     - shaders/aurora.frag
   assets:
     - assets/tokens/
+    # Round flags from HatScripts/circle-flags v2.8.0 (MIT, see LICENSE there).
+    - assets/flags/
   fonts:
     - family: PlusJakartaSans
       fonts:

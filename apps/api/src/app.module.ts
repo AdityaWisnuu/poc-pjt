@@ -9,6 +9,14 @@ import { MarketService } from './market/market.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
 import { PrismaService } from './prisma.service';
+import { FxService } from './remit/fx.service';
+import { BankInaSim, PartnerSim } from './remit/partners.sim';
+import {
+  RecipientController,
+  RemitConsoleController,
+  RemitController,
+} from './remit/remit.controller';
+import { RemitService } from './remit/remit.service';
 import { SETTLEMENT_GATEWAY } from './settlement/gateway';
 import { IndodaxClient } from './settlement/indodax.client';
 import { LiveGateway } from './settlement/live.gateway';
@@ -19,7 +27,14 @@ import { SimGateway } from './settlement/sim.gateway';
     // apps/api/.env wins, so SETTLEMENT_MODE stays explicit for this service.
     ConfigModule.forRoot({ envFilePath: ['.env', '../../.env'] }),
   ],
-  controllers: [OrdersController, ConsoleController, MerchantController],
+  controllers: [
+    OrdersController,
+    ConsoleController,
+    MerchantController,
+    RemitController,
+    RemitConsoleController,
+    RecipientController,
+  ],
   providers: [
     AppConfig,
     PrismaService,
@@ -28,6 +43,10 @@ import { SimGateway } from './settlement/sim.gateway';
     SimGateway,
     LiveGateway,
     OrdersService,
+    FxService,
+    BankInaSim,
+    PartnerSim,
+    RemitService,
     {
       provide: SETTLEMENT_GATEWAY,
       inject: [AppConfig, SimGateway, LiveGateway],

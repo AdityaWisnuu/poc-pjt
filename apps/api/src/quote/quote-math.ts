@@ -25,6 +25,39 @@ export function idrToBuyIdrx(asks: Level[], targetIdrx: number): number {
   throw new InsufficientLiquidityError('Likuiditas IDRX tidak cukup');
 }
 
+/** Rupiah from market-selling `quantity`, walking the bids, net of fee. */
+export function idrFromSelling(bids: Level[], quantity: Decimal) {
+  let remaining = quantity;
+  let gross = new Decimal(0);
+  for (const [price, size] of bids) {
+    const take = Decimal.min(remaining, size);
+    gross = gross.plus(take.times(price));
+    remaining = remaining.minus(take);
+    if (remaining.lte(0)) {
+      const fee = gross.times(SELL_FEE).ceil();
+      return { gross: gross.floor(), fee, net: gross.floor().minus(fee) };
+    }
+  }
+  throw new InsufficientLiquidityError('Likuiditas aset tidak cukup');
+}
+
+/** Stablecoin from market-buying with `idr`, walking the asks, net of fee. */
+export function assetFromBuying(asks: Level[], idr: number) {
+  const fee = new Decimal(idr).times(BUY_FEE).ceil();
+  let remaining = new Decimal(idr).minus(fee);
+  let quantity = new Decimal(0);
+  for (const [price, size] of asks) {
+    const levelValue = new Decimal(size).times(price);
+    if (levelValue.gte(remaining)) {
+      quantity = quantity.plus(remaining.div(price));
+      return { quantity: quantity.toDecimalPlaces(6, Decimal.ROUND_DOWN), fee };
+    }
+    quantity = quantity.plus(size);
+    remaining = remaining.minus(levelValue);
+  }
+  throw new InsufficientLiquidityError('Likuiditas aset tidak cukup');
+}
+
 /** Stablecoin to market-sell so net proceeds cover `idr`, walking the bids. */
 export function assetToSellForIdr(bids: Level[], idr: number): Decimal {
   let remaining = new Decimal(idr).div(new Decimal(1).minus(SELL_FEE));

@@ -4,6 +4,7 @@ import '../api.dart';
 import '../theme.dart';
 import '../widgets/aurora.dart';
 import '../widgets/common.dart';
+import 'remit_start.dart';
 import 'scan.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -189,9 +190,35 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
         Text('Scan QRIS', style: type(14.5, weight: 700)),
+        const SizedBox(height: 18),
+        Pressable(
+          onTap: _openRemit,
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            decoration: BoxDecoration(
+              color: const Color(0x33000000),
+              borderRadius: BorderRadius.circular(21),
+              border: Border.all(color: const Color(0x33FFFFFF)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.public_rounded, size: 18, color: Palette.text),
+                const SizedBox(width: 8),
+                Text('Kirim uang antar negara', style: type(13.5, weight: 700)),
+              ],
+            ),
+          ),
+        ),
       ],
     ),
   );
+
+  Future<void> _openRemit() async {
+    await Navigator.of(context).push(fadeRoute(const RemitStartScreen()));
+    _load();
+  }
 
   Widget _errorCard() => Padding(
     padding: const EdgeInsets.only(bottom: 12),

@@ -58,6 +58,27 @@ String usdc(String value) => _usdc.format(double.parse(value));
 String tokenAmount(String asset, String value) =>
     asset == 'IDRX' ? plainNumber(num.parse(value)) : usdc(value);
 
+const _symbols = {
+  'IDR': 'Rp',
+  'JPY': '¥',
+  'KRW': '₩',
+  'MYR': 'RM',
+  'TWD': r'NT$',
+  'HKD': r'HK$',
+  'SGD': r'S$',
+  'BND': r'B$',
+};
+
+/// Formats an amount string from the API in its own currency.
+String money(String value, String currency) {
+  final number = num.parse(value);
+  if (currency == 'USDC') return '${usdc(value)} USDC';
+  final whole = const ['IDR', 'JPY', 'KRW'].contains(currency);
+  final text = NumberFormat(whole ? '#,##0' : '#,##0.00', 'id').format(number);
+  final symbol = _symbols[currency];
+  return symbol == null ? '$currency $text' : '$symbol$text';
+}
+
 String wibTime(DateTime value) {
   final wib = value.toUtc().add(const Duration(hours: 7));
   return '${DateFormat('d MMM yyyy, HH.mm.ss', 'en_US').format(wib)} WIB';

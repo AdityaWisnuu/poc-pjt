@@ -82,6 +82,86 @@ model Transaction {
   @@map("transactions")
 }
 
+enum RemitDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum RemitStatus {
+  CREATED
+  SCREENING
+  COLLECTING
+  SENDING_ASSET
+  CONVERTING
+  PAYING_OUT
+  SUCCESS
+  FAILED
+  NEEDS_REVIEW
+}
+
+/// A locked price for one remittance. Amounts are fixed until `expiresAt`.
+model RemitQuote {
+  id              String         @id @db.Uuid
+  direction       RemitDirection
+  fundingCurrency String         @map("funding_currency")
+  sendAmount      Decimal        @map("send_amount") @db.Decimal(20, 8)
+  usdcAmount      Decimal        @map("usdc_amount") @db.Decimal(20, 8)
+  receiveAmount   Decimal        @map("receive_amount") @db.Decimal(20, 2)
+  receiveCurrency String         @map("receive_currency")
+  pricing         Json
+  sender          Json
+  recipient       Json
+  expiresAt       DateTime       @map("expires_at")
+  usedAt          DateTime?      @map("used_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  remittance      Remittance?
+
+  @@map("remit_quotes")
+}
+
+model Remittance {
+  id                String         @id @db.Uuid
+  quoteId           String         @unique @map("quote_id") @db.Uuid
+  direction         RemitDirection
+  mode              SettlementMode
+  status            RemitStatus    @default(CREATED)
+  fundingCurrency   String         @map("funding_currency")
+  sendAmount        Decimal        @map("send_amount") @db.Decimal(20, 8)
+  usdcAmount        Decimal        @map("usdc_amount") @db.Decimal(20, 8)
+  receiveAmount     Decimal        @map("receive_amount") @db.Decimal(20, 2)
+  receiveCurrency   String         @map("receive_currency")
+  sender            Json
+  recipient         Json
+  withdrawRequestId String         @unique @map("withdraw_request_id")
+  failureReason     String?        @map("failure_reason")
+  evidence          Json           @default("{}")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  completedAt       DateTime?      @map("completed_at")
+
+  quote     RemitQuote     @relation(fields: [quoteId], references: [id])
+  histories RemitHistory[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("remittances")
+}
+
+model RemitHistory {
+  id           String       @id @db.Uuid
+  remittanceId String       @map("remittance_id") @db.Uuid
+  fromStatus   RemitStatus? @map("from_status")
+  toStatus     RemitStatus  @map("to_status")
+  actor        String
+  note         String?
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  remittance Remittance @relation(fields: [remittanceId], references: [id])
+
+  @@index([remittanceId, createdAt])
+  @@map("remit_histories")
+}
+
 model TransactionHistory {
   id            String             @id @db.Uuid
   transactionId String             @map("transaction_id") @db.Uuid
